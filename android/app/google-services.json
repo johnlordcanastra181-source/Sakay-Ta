@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "726545294940",
+    "project_id": "sakay-ta",
+    "storage_bucket": "sakay-ta.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:726545294940:android:5e18c2a4755c8447472899",
+        "android_client_info": {
+          "package_name": "SAKAY.TA"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKsDY27lUVJ3_FopTbzQpt-nj6dwxaumA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:726545294940:android:daf738f3409f7b47472899",
+        "android_client_info": {
+          "package_name": "com.example.sakay_ta"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCKsDY27lUVJ3_FopTbzQpt-nj6dwxaumA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,43 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isReviewer() {
+      return signedIn() &&
+        firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid));
+    }
+
+    function validImage() {
+      return request.resource != null &&
+        request.resource.size > 0 &&
+        request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    match /driver_documents/{userId}/{documentType}/{fileName} {
+      allow read: if isOwner(userId) || isReviewer();
+      allow create, update: if isOwner(userId) &&
+        documentType in ['profile', 'license', 'orcr'] &&
+        validImage();
+      allow delete: if isOwner(userId) || isReviewer();
+    }
+
+    // Existing edit-profile feature. New writes should use an image payload.
+    match /profile_photos/{fileName} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && (fileName == request.auth.uid || fileName.matches(request.auth.uid + '_.*\\.jpg')) && validImage();
+      allow delete: if signedIn() && (fileName == request.auth.uid || fileName.matches(request.auth.uid + '_.*\\.jpg')) || isReviewer();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

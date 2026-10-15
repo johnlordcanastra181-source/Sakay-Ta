@@ -1,0 +1,51 @@
+name: sakay_ta
+description: A Philippine ride-hailing super app UI for passengers and drivers.
+publish_to: "none"
+version: 1.1.0+2
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  app_links: ^7.2.1
+  async: ^2.13.1
+  connectivity_plus: ^7.3.1
+  crypto: ^3.0.6
+  cupertino_icons: ^1.0.8
+  fl_chart: ^1.2.0
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_map: ^7.0.2
+  geolocator: ^10.1.0
+  http: ^1.2.2
+  latlong2: ^0.9.1
+  image_picker: ^1.1.0
+  intl: ^0.20.2
+  logger: ^2.5.0
+  mailer: ^6.4.0
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  provider: ^6.1.5+1
+  shared_preferences: ^2.5.5
+  sqflite: ^2.4.3
+  sqflite_common: ^2.5.4
+  sqflite_common_ffi: ^2.4.2
+  sqflite_common_ffi_web: ^0.4.5
+  supabase_flutter: ^2.10.3
+  url_launcher: ^6.3.2
+  uuid: ^4.6.0
+  philippines_rpcmb: ^0.0.3
+  postgres: ^3.5.16
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/icon/app_icon.png

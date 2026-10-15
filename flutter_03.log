@@ -1,0 +1,65 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter test test\_web_db_probe_test.dart --platform chrome --no-pub
+
+## exception
+
+_TypeError: Null check operator used on a null value
+
+```
+#0      currentPackageConfig (package:flutter_tools/src/dart/package_map.dart:16:56)
+#1      FlutterWebPlatform.start (package:flutter_tools/src/test/flutter_web_platform.dart:186:49)
+<asynchronous suspension>
+#2      Loader.loadFile.<anonymous closure> (package:test_core/src/runner/loader.dart:245:28)
+<asynchronous suspension>
+#3      new LoadSuite.<anonymous closure>.<anonymous closure> (package:test_core/src/runner/load_suite.dart:95:21)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[✓] Flutter (Channel stable, 3.44.6, on Microsoft Windows [Version 10.0.26200.9457], locale en-US) [8.1s]
+    • Flutter version 3.44.6 on channel stable at C:\Users\jlcap\Downloads\flutter\flutter
+    • Upstream repository https://github.com/flutter/flutter.git
+    • Framework revision ee80f08bbf (2 months ago), 2026-07-08 15:02:06 -0700
+    • Engine revision 83675ed276
+    • Dart version 3.12.2
+    • DevTools version 2.57.0
+    • Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop, enable-android, enable-ios, cli-animations, enable-native-assets, enable-swift-package-manager, omit-legacy-version-file, enable-lldb-debugging, enable-uiscene-migration
+
+[✓] Windows Version (Windows 11 or higher, 25H2, 2009) [10.6s]
+
+[✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0) [17.9s]
+    • Android SDK at C:\Users\jlcap\AppData\Local\Android\Sdk
+    • Emulator version 36.6.11.0 (build_id 15507667) (CL:N/A)
+    • Platform android-36, build-tools 36.0.0
+    • ANDROID_HOME = C:\Users\jlcap\AppData\Local\Android\Sdk
+    • Java binary at: C:\Program Files\Microsoft\jdk-17.0.19.10-hotspot\bin\java
+      This JDK is specified by the JAVA_HOME environment variable.
+      To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
+    • Java version OpenJDK Runtime Environment Microsoft-13877129 (build 17.0.19+10-LTS)
+    • All Android licenses accepted.
+
+[✓] Chrome - develop for the web [56ms]
+    • Chrome at C:\Program Files\Google\Chrome\Application\chrome.exe
+
+[✗] Visual Studio - develop Windows apps [48ms]
+    ✗ Visual Studio not installed; this is necessary to develop Windows apps.
+      Download at https://visualstudio.microsoft.com/downloads/.
+      Please install the "Desktop development with C++" workload, including all of its default components
+
+[✓] Connected device (4 available) [7.4s]
+    • sdk gphone64 x86 64 (mobile) • emulator-5554 • android-x64    • Android 16 (API 36) (emulator)
+    • Windows (desktop)            • windows       • windows-x64    • Microsoft Windows [Version 10.0.26200.9457]
+    • Chrome (web)                 • chrome        • web-javascript • Google Chrome 153.0.8010.48
+    • Edge (web)                   • edge          • web-javascript • Microsoft Edge 153.0.4234.48
+
+[✓] Network resources [1,622ms]
+    • All expected network resources are available.
+
+! Doctor found issues in 1 category.
+```

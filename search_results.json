@@ -1,0 +1,532 @@
+﻿[
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\admin_main.dart",
+        "LineNumber":  137,
+        "Line":  "  late bool _showPasswordRecovery;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\admin_main.dart",
+        "LineNumber":  142,
+        "Line":  "    _showPasswordRecovery ="
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\admin_main.dart",
+        "LineNumber":  143,
+        "Line":  "        widget.supabaseReady \u0026\u0026 PasswordRecoveryService.isRecoveryUri(Uri.base);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\admin_main.dart",
+        "LineNumber":  163,
+        "Line":  "    if (_showPasswordRecovery) {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\admin_main.dart",
+        "LineNumber":  164,
+        "Line":  "      return PasswordRecoveryPage("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\admin_main.dart",
+        "LineNumber":  167,
+        "Line":  "          if (mounted) setState(() =\u003e _showPasswordRecovery = false);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  151,
+        "Line":  "  passwordRecovery,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  242,
+        "Line":  "  StreamSubscription\u003cUri\u003e? _passwordRecoveryLinks;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  249,
+        "Line":  "    _passwordRecoveryLinks = DeepLinkService.instance.links.listen((uri) {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  250,
+        "Line":  "      if (!PasswordRecoveryService.isRecoveryUri(uri) || !mounted) return;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  253,
+        "Line":  "        screen = AppScreen.passwordRecovery;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  258,
+        "Line":  "        DeepLinkService.instance.takeInitialPasswordRecoveryLink();"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  260,
+        "Line":  "        PasswordRecoveryService.isRecoveryUri(initialLink)) {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  262,
+        "Line":  "      screen = AppScreen.passwordRecovery;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  286,
+        "Line":  "    _passwordRecoveryLinks?.cancel();"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  290,
+        "Line":  "  Future\u003cvoid\u003e _finishPasswordRecovery() async {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  326,
+        "Line":  "      AppScreen.passwordRecovery =\u003e password_recovery.PasswordRecoveryPage("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\main.dart",
+        "LineNumber":  327,
+        "Line":  "          onFinished: _finishPasswordRecovery,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\l10n\\app_localizations.dart",
+        "LineNumber":  373,
+        "Line":  "  /// No description provided for @loginForgotPassword."
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\l10n\\app_localizations.dart",
+        "LineNumber":  376,
+        "Line":  "  /// **\u0027Forgot Password?\u0027**"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\l10n\\app_localizations.dart",
+        "LineNumber":  377,
+        "Line":  "  String get loginForgotPassword;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\l10n\\app_localizations_ceb.dart",
+        "LineNumber":  147,
+        "Line":  "  String get loginForgotPassword =\u003e \u0027Nakalimot sa Password?\u0027;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\l10n\\app_localizations_en.dart",
+        "LineNumber":  147,
+        "Line":  "  String get loginForgotPassword =\u003e \u0027Forgot Password?\u0027;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\l10n\\app_localizations_tl.dart",
+        "LineNumber":  147,
+        "Line":  "  String get loginForgotPassword =\u003e \u0027Nakalimutan ang Password?\u0027;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\models\\email_otp.dart",
+        "LineNumber":  5,
+        "Line":  "  final String purpose; // \u0027signup\u0027 | \u0027login\u0027 | \u0027reset_password\u0027"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\email_otp_page.dart",
+        "LineNumber":  97,
+        "Line":  "  Future\u003cvoid\u003e _verifyOtp() async {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\email_otp_page.dart",
+        "LineNumber":  286,
+        "Line":  "                          _verifyOtp();"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\email_otp_page.dart",
+        "LineNumber":  394,
+        "Line":  "                    _isSubmitting || _otpCode.length \u003c 6 ? null : _verifyOtp,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\login_page.dart",
+        "LineNumber":  89,
+        "Line":  "  Future\u003cvoid\u003e _forgotPassword() =\u003e showPasswordRecoveryDialog("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\login_page.dart",
+        "LineNumber":  422,
+        "Line":  "              // Password Label \u0026 Forgot Password Link row"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\login_page.dart",
+        "LineNumber":  435,
+        "Line":  "                    onTap: _forgotPassword,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\login_page.dart",
+        "LineNumber":  437,
+        "Line":  "                      l10n.loginForgotPassword,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\passenger_profile.dart",
+        "LineNumber":  233,
+        "Line":  "                  \u0027Enter your current password and choose a new password with at least 6 characters.\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\passenger_profile.dart",
+        "LineNumber":  275,
+        "Line":  "                    labelText: \u0027New Password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\passenger_profile.dart",
+        "LineNumber":  294,
+        "Line":  "                    labelText: \u0027Confirm New Password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\passenger_profile.dart",
+        "LineNumber":  332,
+        "Line":  "                            \u0027New password must be at least 6 characters.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\passenger_profile.dart",
+        "LineNumber":  337,
+        "Line":  "                            \u0027New password must differ from your current password.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\passenger_profile.dart",
+        "LineNumber":  342,
+        "Line":  "                            () =\u003e error = \u0027New passwords do not match.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  8,
+        "Line":  "Future\u003cvoid\u003e showPasswordRecoveryDialog("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  16,
+        "Line":  "      builder: (dialogContext) =\u003e _PasswordRecoveryRequestDialog("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  25,
+        "Line":  "class _PasswordRecoveryRequestDialog extends StatefulWidget {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  26,
+        "Line":  "  const _PasswordRecoveryRequestDialog({required this.emailController});"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  31,
+        "Line":  "  State\u003c_PasswordRecoveryRequestDialog\u003e createState() =\u003e"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  32,
+        "Line":  "      _PasswordRecoveryRequestDialogState();"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  35,
+        "Line":  "class _PasswordRecoveryRequestDialogState"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  36,
+        "Line":  "    extends State\u003c_PasswordRecoveryRequestDialog\u003e {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  48,
+        "Line":  "      await PasswordRecoveryService.sendRecoveryEmail("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  72,
+        "Line":  "                \u0027If this email has a Sakay Ta account, a password-reset link has been sent. Open the link in this app or browser to choose a new password.\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  125,
+        "Line":  "class PasswordRecoveryPage extends StatefulWidget {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  126,
+        "Line":  "  const PasswordRecoveryPage({super.key, required this.onFinished});"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  131,
+        "Line":  "  State\u003cPasswordRecoveryPage\u003e createState() =\u003e _PasswordRecoveryPageState();"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  134,
+        "Line":  "class _PasswordRecoveryPageState extends State\u003cPasswordRecoveryPage\u003e {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  160,
+        "Line":  "      await PasswordRecoveryService.updatePassword(_password.text);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  175,
+        "Line":  "    final hasSession = PasswordRecoveryService.hasRecoverySession;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  200,
+        "Line":  "                              \u0027Sign in with your new password and select the correct account role.\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  214,
+        "Line":  "                            const Text(\u0027Choose a new password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  221,
+        "Line":  "                                  : \u0027This recovery link is invalid or expired. Request a new password-reset link.\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  229,
+        "Line":  "                                labelText: \u0027New password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  246,
+        "Line":  "                                labelText: \u0027Confirm new password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\password_recovery_page.dart",
+        "LineNumber":  268,
+        "Line":  "                                  : const Text(\u0027Save new password\u0027),"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\auth_service.dart",
+        "LineNumber":  304,
+        "Line":  "            unawaited(SupabaseService.instance.updateUser(uid, {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\auth_service.dart",
+        "LineNumber":  310,
+        "Line":  "              unawaited(SupabaseService.instance.updateUser(resolvedUser.id, {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\auth_service.dart",
+        "LineNumber":  1280,
+        "Line":  "  Future\u003cvoid\u003e updateUser(AppUser user) async {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\deep_link_service.dart",
+        "LineNumber":  32,
+        "Line":  "  Uri? _initialPasswordRecoveryLink;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\deep_link_service.dart",
+        "LineNumber":  47,
+        "Line":  "        if (PasswordRecoveryService.isRecoveryUri(initial)) {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\deep_link_service.dart",
+        "LineNumber":  48,
+        "Line":  "          _initialPasswordRecoveryLink = initial;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\deep_link_service.dart",
+        "LineNumber":  75,
+        "Line":  "  Uri? takeInitialPasswordRecoveryLink() {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\deep_link_service.dart",
+        "LineNumber":  76,
+        "Line":  "    final link = _initialPasswordRecoveryLink;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\deep_link_service.dart",
+        "LineNumber":  77,
+        "Line":  "    _initialPasswordRecoveryLink = null;"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\email_otp_service.dart",
+        "LineNumber":  287,
+        "Line":  "  ///   1. If OTP was sent via Supabase Auth (empty otpCode in store), use verifyOTP"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\email_otp_service.dart",
+        "LineNumber":  308,
+        "Line":  "        // Use Supabase Auth verifyOTP to verify the code and establish a session"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\email_otp_service.dart",
+        "LineNumber":  311,
+        "Line":  "          final res = await Supabase.instance.client.auth.verifyOTP("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\email_otp_service.dart",
+        "LineNumber":  525,
+        "Line":  "        : (purpose == \u0027reset_password\u0027"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\password_recovery_service.dart",
+        "LineNumber":  8,
+        "Line":  "abstract final class PasswordRecoveryService {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\password_recovery_service.dart",
+        "LineNumber":  45,
+        "Line":  "    await Supabase.instance.client.auth.resetPasswordForEmail("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\password_recovery_service.dart",
+        "LineNumber":  51,
+        "Line":  "  static Future\u003cvoid\u003e updatePassword(String password) async {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\password_recovery_service.dart",
+        "LineNumber":  58,
+        "Line":  "      throw ArgumentError(\u0027Use at least 8 characters for your new password.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\password_recovery_service.dart",
+        "LineNumber":  60,
+        "Line":  "    await Supabase.instance.client.auth.updateUser("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\password_recovery_service.dart",
+        "LineNumber":  64,
+        "Line":  "    // user explicitly signs in again with the new password and chosen role."
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase_auth_service.dart",
+        "LineNumber":  69,
+        "Line":  "      await auth.updateUser(UserAttributes(password: password));"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase_database_service.dart",
+        "LineNumber":  154,
+        "Line":  "  Future\u003cvoid\u003e updateUser(String userId, Map\u003cString, Object?\u003e fields) async {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase_database_service.dart",
+        "LineNumber":  999,
+        "Line":  "      Future.error(UnsupportedError(\u0027Use Supabase Auth verifyOTP.\u0027));"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase_database_service.dart",
+        "LineNumber":  1425,
+        "Line":  "      await updateUser(uid, {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase_service.dart",
+        "LineNumber":  73,
+        "Line":  "  Future\u003cvoid\u003e updateUser(String userId, Map\u003cString, Object?\u003e fields) {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase_service.dart",
+        "LineNumber":  74,
+        "Line":  "    return _database.updateUser(userId, fields);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\state\\app_state.dart",
+        "LineNumber":  620,
+        "Line":  "        await SupabaseService.instance.updateUser((user as dynamic).id, {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\state\\app_state.dart",
+        "LineNumber":  641,
+        "Line":  "          .updateUser(currentUser!.id, {\u0027is_online\u0027: 0});"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\state\\app_state.dart",
+        "LineNumber":  1919,
+        "Line":  "      await auth.updateUser(user.copyWith(status: status));"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\state\\app_state.dart",
+        "LineNumber":  2206,
+        "Line":  "      await auth.updateUser(updated);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\state\\app_state.dart",
+        "LineNumber":  2226,
+        "Line":  "            \u0027New password must be different from your current password.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\state\\app_state.dart",
+        "LineNumber":  2241,
+        "Line":  "      await Supabase.instance.client.auth.updateUser(UserAttributes(password: password));"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\widgets\\edit_profile_modal.dart",
+        "LineNumber":  186,
+        "Line":  "      await app.auth.updateUser(updated);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\widgets\\edit_profile_modal.dart",
+        "LineNumber":  198,
+        "Line":  "        await SupabaseService.instance.updateUser(widget.user.id, fields);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase\\profile_service.dart",
+        "LineNumber":  44,
+        "Line":  "  Future\u003cvoid\u003e updateUser(String userId, Map\u003cString, dynamic\u003e fields) async {"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\services\\supabase\\profile_service.dart",
+        "LineNumber":  50,
+        "Line":  "      debugPrint(\u0027SupabaseProfileService: updateUser error for $userId ($e)\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_login_view.dart",
+        "LineNumber":  96,
+        "Line":  "  Future\u003cvoid\u003e _forgotPassword() =\u003e showPasswordRecoveryDialog("
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_login_view.dart",
+        "LineNumber":  278,
+        "Line":  "                      onPressed: _isLoading ? null : _forgotPassword,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_login_view.dart",
+        "LineNumber":  279,
+        "Line":  "                      child: const Text(\u0027Forgot password?\u0027),"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  171,
+        "Line":  "                          labelText: \u0027New Password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  197,
+        "Line":  "                          labelText: \u0027Confirm New Password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  198,
+        "Line":  "                          hintText: \u0027Re-enter your new password\u0027,"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  242,
+        "Line":  "                                \u0027New password must be at least 6 characters.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  247,
+        "Line":  "                                \u0027New password must be different from your current password.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  252,
+        "Line":  "                                () =\u003e error = \u0027New passwords do not match.\u0027);"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  274,
+        "Line":  "                                      \u0027Password updated successfully! Please remember your new password.\u0027),"
+    },
+    {
+        "Path":  "C:\\Users\\jlcap\\Downloads\\Sakay_Ta\\lib\\pages\\admin\\views\\admin_profile_view.dart",
+        "LineNumber":  305,
+        "Line":  "                      : const Text(\u0027Save New Password\u0027,"
+    }
+]
