@@ -1593,6 +1593,9 @@ class DatabaseService {
     }
     if (status == ReportStatus.resolved) {
       updates['resolved_at'] = DateTime.now().millisecondsSinceEpoch;
+    } else {
+      updates['resolved_at'] = null;
+      updates['resolved_by_admin_name'] = null;
     }
     await db.update(
       'reports',

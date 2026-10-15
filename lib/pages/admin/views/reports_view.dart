@@ -35,10 +35,14 @@ class _AdminReportsViewState extends State<AdminReportsView> {
   void _openReportDetailsDialog(FireReport report) {
     final app = context.read<AppState>();
     final noteCtrl = TextEditingController();
-    final resolutionCtrl = TextEditingController();
+    final resolutionCtrl =
+        TextEditingController(text: report.resolutionSummary ?? '');
     String newStatus = report.status;
     final screenWidth = MediaQuery.of(context).size.width;
     final dialogWidth = (screenWidth * 0.94).clamp(280.0, 600.0);
+    final notesLog = List<String>.from(report.adminNotes);
+    bool isSaving = false;
+    bool isAddingNote = false;
 
     showDialog<void>(
       context: context,
@@ -82,7 +86,7 @@ class _AdminReportsViewState extends State<AdminReportsView> {
                     ],
                   ),
                 ),
-                AdminStatusBadge(status: report.status),
+                AdminStatusBadge(status: newStatus),
               ],
             ),
             content: SizedBox(
@@ -144,14 +148,14 @@ class _AdminReportsViewState extends State<AdminReportsView> {
                             fontSize: 11,
                             fontWeight: FontWeight.w700)),
                     const SizedBox(height: 6),
-                    if (report.adminNotes.isEmpty)
+                    if (notesLog.isEmpty)
                       const Text('No investigation notes added yet.',
                           style: TextStyle(
                               color: AdminTheme.textMuted,
                               fontSize: 12,
                               fontStyle: FontStyle.italic))
                     else
-                      ...report.adminNotes.map((note) {
+                      ...notesLog.map((note) {
                         return Container(
                           margin: const EdgeInsets.only(bottom: 6),
                           padding: const EdgeInsets.all(8),
@@ -191,22 +195,61 @@ class _AdminReportsViewState extends State<AdminReportsView> {
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          onPressed: () async {
-                            if (noteCtrl.text.trim().isNotEmpty) {
-                              await app.addReportNote(
-                                  report.id, noteCtrl.text.trim());
-                              noteCtrl.clear();
-                              if (ctx.mounted) Navigator.of(ctx).pop();
-                            }
-                          },
+                          onPressed: isAddingNote
+                              ? null
+                              : () async {
+                                  final noteText = noteCtrl.text.trim();
+                                  if (noteText.isEmpty) return;
+                                  setModalState(() => isAddingNote = true);
+                                  try {
+                                    await app.addReportNote(
+                                        report.id, noteText);
+                                    noteCtrl.clear();
+                                    setModalState(() {
+                                      notesLog.add(noteText);
+                                      isAddingNote = false;
+                                    });
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content:
+                                              Text('Investigation note added.'),
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                    }
+                                  } catch (e) {
+                                    setModalState(() => isAddingNote = false);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content:
+                                              Text('Failed to add note: $e'),
+                                          backgroundColor: AdminTheme.danger,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AdminTheme.navyLight,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 12),
                           ),
-                          child: const Text('Add Note',
-                              style: TextStyle(fontSize: 12)),
+                          child: isAddingNote
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Add Note',
+                                  style: TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
@@ -264,31 +307,70 @@ class _AdminReportsViewState extends State<AdminReportsView> {
                     style: TextStyle(color: AdminTheme.slate)),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  await app.updateReportStatus(
-                    report.id,
-                    newStatus,
-                    resolution: resolutionCtrl.text.trim().isNotEmpty
-                        ? resolutionCtrl.text.trim()
-                        : null,
-                    adminName: 'Admin',
-                  );
-                  if (ctx.mounted) {
-                    Navigator.of(ctx).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content: Text('Report updated successfully.')),
-                    );
-                  }
-                },
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final resolutionText = resolutionCtrl.text.trim();
+                        if (newStatus == ReportStatus.resolved &&
+                            resolutionText.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  'Please enter a resolution summary before marking this report as resolved.'),
+                              backgroundColor: AdminTheme.danger,
+                            ),
+                          );
+                          return;
+                        }
+
+                        setModalState(() => isSaving = true);
+                        try {
+                          await app.updateReportStatus(
+                            report.id,
+                            newStatus,
+                            resolution: resolutionText.isNotEmpty
+                                ? resolutionText
+                                : null,
+                            adminName: 'Admin',
+                          );
+                          if (ctx.mounted) {
+                            Navigator.of(ctx).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Report updated successfully!'),
+                                backgroundColor: AdminTheme.success,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          setModalState(() => isSaving = false);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to update report: $e'),
+                                backgroundColor: AdminTheme.danger,
+                              ),
+                            );
+                          }
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AdminTheme.terracotta,
                   foregroundColor: Colors.white,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
-                child: const Text('Save Changes',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text('Save Changes',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
               ),
             ],
           );

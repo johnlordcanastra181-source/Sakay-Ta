@@ -2862,19 +2862,66 @@ class SupabaseDatabaseService {
         (current['admin_notes'] as List?)?.map((e) => e.toString()).toList() ??
             <String>[];
     if (notes != null && notes.trim().isNotEmpty) existing.add(notes.trim());
-    await _client.from('reports').update({
+
+    final resolvedByUuid =
+        _uuidOrNull(adminId) ?? _uuidOrNull(_client.auth.currentUser?.id);
+    final isResolved = status == ReportStatus.resolved;
+
+    final updateData = <String, dynamic>{
       'status': status,
       'admin_notes': existing,
-      if (resolution != null) 'resolution_summary': resolution,
-      if (adminId != null) 'resolved_by': adminId,
-      if (status == ReportStatus.resolved)
-        'resolved_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', reportId);
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (resolution != null) {
+      updateData['resolution_summary'] =
+          resolution.trim().isEmpty ? null : resolution.trim();
+    }
+    if (isResolved) {
+      updateData['resolved_at'] = DateTime.now().toUtc().toIso8601String();
+      if (resolvedByUuid != null) {
+        updateData['resolved_by'] = resolvedByUuid;
+      }
+    } else {
+      updateData['resolved_at'] = null;
+      updateData['resolved_by'] = null;
+    }
+
+    final res = await _client
+        .from('reports')
+        .update(updateData)
+        .eq('id', reportId)
+        .select('id');
+    if ((res as List).isEmpty) {
+      throw StateError(
+          'Report update failed: Report "$reportId" not found or update not permitted.');
+    }
   }
 
-  Future<void> addReportNote(String reportId, String note) =>
-      updateReportStatus(reportId, ReportStatus.underInvestigation,
-          notes: note);
+  Future<void> addReportNote(String reportId, String note) async {
+    final trimmed = note.trim();
+    if (trimmed.isEmpty) return;
+    final current = await _client
+        .from('reports')
+        .select('admin_notes')
+        .eq('id', reportId)
+        .single();
+    final existing =
+        (current['admin_notes'] as List?)?.map((e) => e.toString()).toList() ??
+            <String>[];
+    existing.add(trimmed);
+    final res = await _client
+        .from('reports')
+        .update({
+          'admin_notes': existing,
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', reportId)
+        .select('id');
+    if ((res as List).isEmpty) {
+      throw StateError(
+          'Failed to add note: Report "$reportId" not found or update not permitted.');
+    }
+  }
 
   /// New reports must use a plain INSERT: PostgREST UPSERT also requires the
   /// UPDATE RLS policy, which is admin-only on public.reports.

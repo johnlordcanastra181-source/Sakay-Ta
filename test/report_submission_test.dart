@@ -117,6 +117,90 @@ void main() {
       expect(map['ride_id'], validRideId);
       expect(map['type'], ReportType.overcharging);
     });
+
+    test('Resolution summary validation contract for resolved status', () {
+      bool isResolutionValid(String status, String? summary) {
+        if (status == ReportStatus.resolved) {
+          return summary != null && summary.trim().isNotEmpty;
+        }
+        return true;
+      }
+
+      expect(isResolutionValid(ReportStatus.resolved, ''), isFalse);
+      expect(isResolutionValid(ReportStatus.resolved, '   '), isFalse);
+      expect(isResolutionValid(ReportStatus.resolved, null), isFalse);
+      expect(
+          isResolutionValid(ReportStatus.resolved, 'Passenger was refunded.'),
+          isTrue);
+
+      // Non-resolved statuses do not require resolution summary
+      expect(isResolutionValid(ReportStatus.pending, ''), isTrue);
+      expect(isResolutionValid(ReportStatus.underInvestigation, null), isTrue);
+      expect(isResolutionValid(ReportStatus.dismissed, ''), isTrue);
+    });
+
+    test('Status transition to resolved retains resolution details and timestamps', () {
+      final adminUid = const Uuid().v4();
+      final report = FireReport(
+        id: 'rep_100',
+        reporterId: const Uuid().v4(),
+        reporterName: 'Juan',
+        type: ReportType.lostItem,
+        title: 'Lost phone',
+        description: 'Black iPhone in tricycle',
+        createdAt: DateTime.utc(2026, 10, 15, 10, 0),
+      );
+
+      final now = DateTime.utc(2026, 10, 15, 11, 0);
+      final resolvedReport = report.copyWith(
+        status: ReportStatus.resolved,
+        resolutionSummary: 'Phone returned to passenger at TODA terminal.',
+        resolvedByAdminId: adminUid,
+        resolvedAt: now,
+        updatedAt: now,
+      );
+
+      expect(resolvedReport.status, ReportStatus.resolved);
+      expect(resolvedReport.resolutionSummary,
+          'Phone returned to passenger at TODA terminal.');
+      expect(resolvedReport.resolvedByAdminId, adminUid);
+      expect(resolvedReport.resolvedAt, now);
+
+      final map = resolvedReport.toMap();
+      expect(map['status'], ReportStatus.resolved);
+      expect(map['resolution_summary'],
+          'Phone returned to passenger at TODA terminal.');
+      expect(map['resolved_by'], adminUid);
+      expect(map['resolved_at'], isNotNull);
+    });
+
+    test('Adding investigation note does not alter existing report status', () {
+      final report = FireReport(
+        id: 'rep_200',
+        reporterId: const Uuid().v4(),
+        reporterName: 'Ana',
+        type: ReportType.driverBehavior,
+        title: 'Rude driver',
+        description: 'Driver refused to give change',
+        status: ReportStatus.pending,
+        adminNotes: const ['First contact attempted via phone'],
+        createdAt: DateTime.utc(2026, 10, 15, 8, 0),
+      );
+
+      // Appending a note must NOT change status to under_investigation or anything else
+      final updatedNotes = List<String>.from(report.adminNotes)
+        ..add('Passenger confirmed receipt of change.');
+
+      final updatedReport = report.copyWith(
+        adminNotes: updatedNotes,
+        updatedAt: DateTime.utc(2026, 10, 15, 9, 30),
+      );
+
+      expect(updatedReport.status, ReportStatus.pending);
+      expect(updatedReport.adminNotes.length, 2);
+      expect(updatedReport.adminNotes.last,
+          'Passenger confirmed receipt of change.');
+    });
   });
 }
 

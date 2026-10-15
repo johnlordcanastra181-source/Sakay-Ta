@@ -2120,9 +2120,13 @@ class AppState extends ChangeNotifier {
 
   /// Appends an investigation note to a report.
   Future<void> addReportNote(String reportId, String note) async {
-    await DatabaseService.instance.addReportNote(reportId, note);
     if (SupabaseService.isConfigured) {
       await SupabaseService.instance.addReportNote(reportId, note);
+    }
+    try {
+      await DatabaseService.instance.addReportNote(reportId, note);
+    } catch (e) {
+      debugPrint('[Reports] local cache addReportNote skipped: $e');
     }
     notifyListeners();
   }
@@ -2133,20 +2137,29 @@ class AppState extends ChangeNotifier {
     String status, {
     String? resolution,
     String? adminName,
+    String? adminId,
   }) async {
-    await DatabaseService.instance.updateReportStatus(
-      reportId,
-      status,
-      resolution: resolution,
-      adminName: adminName,
-    );
+    final effectiveAdminId = adminId ?? currentUser?.id;
+    final effectiveAdminName =
+        adminName ?? currentUser?.fullName ?? 'Admin Staff';
     if (SupabaseService.isConfigured) {
       await SupabaseService.instance.updateReportStatus(
         reportId,
         status,
         resolution: resolution,
-        adminName: adminName,
+        adminId: effectiveAdminId,
+        adminName: effectiveAdminName,
       );
+    }
+    try {
+      await DatabaseService.instance.updateReportStatus(
+        reportId,
+        status,
+        resolution: resolution,
+        adminName: effectiveAdminName,
+      );
+    } catch (e) {
+      debugPrint('[Reports] local cache updateReportStatus skipped: $e');
     }
     notifyListeners();
   }

@@ -205,14 +205,29 @@ class FireReport {
         'priority': priority,
         'adminNotes': adminNotes,
         'admin_notes': adminNotes,
-        if (resolutionSummary != null) 'resolutionSummary': resolutionSummary,
-        if (resolvedByAdminId != null) 'resolvedByAdminId': resolvedByAdminId,
-        if (resolvedByAdminName != null)
+        if (resolutionSummary != null) ...{
+          'resolutionSummary': resolutionSummary,
+          'resolution_summary': resolutionSummary,
+        },
+        if (resolvedByAdminId != null) ...{
+          'resolvedByAdminId': resolvedByAdminId,
+          'resolved_by': resolvedByAdminId,
+          'resolved_by_admin_id': resolvedByAdminId,
+        },
+        if (resolvedByAdminName != null) ...{
           'resolvedByAdminName': resolvedByAdminName,
+          'resolved_by_admin_name': resolvedByAdminName,
+        },
         'createdAt': createdAt.toUtc().toIso8601String(),
         'created_at': createdAt.toUtc().toIso8601String(),
-        if (updatedAt != null) 'updatedAt': updatedAt!.toUtc().toIso8601String(),
-        if (resolvedAt != null) 'resolvedAt': resolvedAt!.toUtc().toIso8601String(),
+        if (updatedAt != null) ...{
+          'updatedAt': updatedAt!.toUtc().toIso8601String(),
+          'updated_at': updatedAt!.toUtc().toIso8601String(),
+        },
+        if (resolvedAt != null) ...{
+          'resolvedAt': resolvedAt!.toUtc().toIso8601String(),
+          'resolved_at': resolvedAt!.toUtc().toIso8601String(),
+        },
       };
 
   factory FireReport.fromMap(Map<String, dynamic> map, [String? docId]) {
@@ -255,7 +270,8 @@ class FireReport {
       resolutionSummary: map['resolutionSummary']?.toString() ??
           map['resolution_summary']?.toString(),
       resolvedByAdminId: map['resolvedByAdminId']?.toString() ??
-          map['resolved_by_admin_id']?.toString(),
+          map['resolved_by_admin_id']?.toString() ??
+          map['resolved_by']?.toString(),
       resolvedByAdminName: map['resolvedByAdminName']?.toString() ??
           map['resolved_by_admin_name']?.toString(),
       createdAt: _parseDate(map['createdAt'] ?? map['created_at']),
