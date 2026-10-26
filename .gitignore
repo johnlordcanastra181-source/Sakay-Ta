@@ -21,6 +21,10 @@ ios/Pods/
 node_modules/
 tmp/
 scratch/
+scratch_db/
+_archive/
+_trash/
+*.log
 *.apk
 *.aab
 *.exe
