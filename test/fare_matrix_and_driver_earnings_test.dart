@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sakay_ta/core/constants.dart';
-import 'package:sakay_ta/models/fare_matrix.dart';
 import 'package:sakay_ta/models/trip.dart';
 import 'package:sakay_ta/services/driver_matching_service.dart';
 import 'package:sakay_ta/services/fare_calculator.dart';

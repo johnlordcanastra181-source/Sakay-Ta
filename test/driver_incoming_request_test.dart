@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sakay_ta/core/constants.dart';
 import 'package:sakay_ta/models/trip.dart';
-import 'package:sakay_ta/services/supabase_database_service.dart';
 import 'package:sakay_ta/state/app_state.dart';
 
 Trip ride({

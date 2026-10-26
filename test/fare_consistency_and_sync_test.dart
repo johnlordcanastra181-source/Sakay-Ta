@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sakay_ta/core/constants.dart';
-import 'package:sakay_ta/models/trip.dart';
 import 'package:sakay_ta/services/auth_service.dart';
 import 'package:sakay_ta/services/database_service.dart';
 import 'package:sakay_ta/services/prefs_service.dart';
