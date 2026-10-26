@@ -73,7 +73,9 @@ class MapExportModal extends StatelessWidget {
                         mode: LaunchMode.externalApplication)) {
                       return;
                     }
-                  } catch (_) {}
+                  } catch (e) {
+                    debugPrint('MapExportModal non-fatal note: $e');
+                  }
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                         content: Text('Unable to open the map.')));

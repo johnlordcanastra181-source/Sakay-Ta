@@ -74,7 +74,9 @@ class _WeatherBadgeState extends State<WeatherBadge> {
         );
         if (loc.isValid) return loc;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('WeatherBadge non-fatal note: $e');
+    }
     return const Geo(11.2444, 125.0039); // Tacloban default
   }
 

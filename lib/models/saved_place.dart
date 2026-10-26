@@ -69,18 +69,37 @@ class SavedPlace {
         'created_at': createdAt.millisecondsSinceEpoch,
       };
 
+  Map<String, Object?> toDatabaseRow() => {
+        'id': id,
+        'user_id': userId,
+        'name': name,
+        'address': address,
+        'latitude': geo.lat,
+        'longitude': geo.lng,
+        'category': category,
+        'created_at': createdAt.toUtc().toIso8601String(),
+      };
+
   factory SavedPlace.fromMap(Map<String, Object?> map) => SavedPlace(
-        id: map['id'] as String,
-        userId: (map['user_id'] ?? map['userId'] ?? '') as String,
+        id: (map['id'] ?? '').toString(),
+        userId: (map['user_id'] ?? map['userId'] ?? '').toString(),
         name: (map['name'] as String?) ?? 'Saved Place',
         address: (map['address'] as String?) ?? '',
         geo: Geo(
-          (map['lat'] as num?)?.toDouble() ?? 10.3157,
-          (map['lng'] as num?)?.toDouble() ?? 123.8854,
+          (map['latitude'] as num?)?.toDouble() ??
+              (map['lat'] as num?)?.toDouble() ??
+              10.3157,
+          (map['longitude'] as num?)?.toDouble() ??
+              (map['lng'] as num?)?.toDouble() ??
+              123.8854,
         ),
         category: (map['category'] as String?) ?? 'custom',
         createdAt: () {
           final val = map['created_at'] ?? map['createdAt'];
+          if (val is String) {
+            final parsed = DateTime.tryParse(val);
+            if (parsed != null) return parsed;
+          }
           if (val is int) {
             return DateTime.fromMillisecondsSinceEpoch(val);
           }

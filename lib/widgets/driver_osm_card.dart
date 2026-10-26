@@ -45,24 +45,11 @@ class _DriverOsmCardState extends State<DriverOsmCard>
   bool _serviceDisabled = false;
 
   AnimationController? _cameraAnimController;
-  late final AnimationController _pulseAnimController;
-  late final Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
     _mapController = MapController();
-
-    _pulseAnimController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat();
-
-    _pulseAnimation = CurvedAnimation(
-      parent: _pulseAnimController,
-      curve: Curves.easeOut,
-    );
-
     _initLocation();
   }
 
@@ -82,7 +69,6 @@ class _DriverOsmCardState extends State<DriverOsmCard>
   void dispose() {
     _positionSub?.cancel();
     _cameraAnimController?.dispose();
-    _pulseAnimController.dispose();
     _mapController.dispose();
     super.dispose();
   }
@@ -313,6 +299,11 @@ class _DriverOsmCardState extends State<DriverOsmCard>
               children: [
                 TileLayer(
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  keepBuffer: 1,
+                  panBuffer: 0,
+                  tileUpdateTransformer:
+                      TileUpdateTransformers.throttle(const Duration(milliseconds: 120)),
+                  evictErrorTileStrategy: EvictErrorTileStrategy.none,
                   userAgentPackageName: 'ph.sakayta.driver',
                   maxZoom: 19,
                   subdomains: const ['a', 'b', 'c'],
@@ -526,49 +517,41 @@ class _DriverOsmCardState extends State<DriverOsmCard>
   }
 
   Widget _buildDriverMarker() {
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            // Pulse circle
-            Container(
-              width: 32 + (16 * _pulseAnimation.value),
-              height: 32 + (16 * _pulseAnimation.value),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF2563EB)
-                    .withValues(alpha: (1.0 - _pulseAnimation.value) * 0.4),
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF2563EB).withValues(alpha: 0.22),
+          ),
+        ),
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E293B),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 2.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
               ),
+            ],
+          ),
+          child: const Center(
+            child: Icon(
+              Icons.navigation_rounded,
+              color: Color(0xFFFFD600),
+              size: 15,
             ),
-            // Solid center pin
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E293B),
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 2.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Center(
-                child: Icon(
-                  Icons.navigation_rounded,
-                  color: Color(0xFFFFD600),
-                  size: 15,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+          ),
+        ),
+      ],
     );
   }
 }

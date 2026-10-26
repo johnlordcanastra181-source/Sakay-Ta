@@ -300,7 +300,9 @@ class SupabaseDriverService {
           if (userSnap != null) {
             user = AppUser.fromMap(userSnap);
           }
-        } catch (_) {}
+        } catch (e) {
+          debugPrint('DriverService non-fatal note: $e');
+        }
 
         final resolvedUser = user ?? _appUserFromDriverProfile(doc, userId);
         if (resolvedUser != null) {

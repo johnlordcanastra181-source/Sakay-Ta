@@ -12,6 +12,8 @@ import 'pages/admin/views/admin_login_view.dart';
 import 'services/auth_service.dart';
 import 'services/database_service.dart';
 
+import 'services/password_change_service.dart';
+import 'services/password_recovery_service.dart';
 import 'services/supabase_service.dart';
 import 'services/prefs_service.dart';
 import 'state/app_state.dart';
@@ -140,6 +142,7 @@ class _AdminWebAuthRouterState extends State<_AdminWebAuthRouter> {
   String? _authorizationUserId;
   String? _authorizationToken;
   Future<bool>? _authorization;
+  bool _lastAuthorizedForUser = false;
   StreamSubscription<AuthState>? _authSubscription;
 
   @override
@@ -147,6 +150,10 @@ class _AdminWebAuthRouterState extends State<_AdminWebAuthRouter> {
     super.initState();
     _authSubscription =
         Supabase.instance.client.auth.onAuthStateChange.listen((_) {
+      if (PasswordChangeService.isFlowActive ||
+          PasswordRecoveryService.isFlowActive) {
+        return;
+      }
       if (mounted) setState(() {});
     });
   }
@@ -158,13 +165,22 @@ class _AdminWebAuthRouterState extends State<_AdminWebAuthRouter> {
   }
 
   Future<bool> _authorizationFor(String userId, String accessToken) {
+    if (_authorizationUserId != userId) {
+      _lastAuthorizedForUser = false;
+    }
     if (_authorizationUserId != userId ||
         _authorizationToken != accessToken ||
         _authorization == null) {
       _authorizationUserId = userId;
       _authorizationToken = accessToken;
-      _authorization =
-          SupabaseService.instance.isCurrentAdminAuthorized(userId);
+      _authorization = SupabaseService.instance
+          .isCurrentAdminAuthorized(userId)
+          .then((authorized) {
+        if (_authorizationUserId == userId) {
+          _lastAuthorizedForUser = authorized;
+        }
+        return authorized;
+      });
     }
     return _authorization!;
   }
@@ -203,6 +219,9 @@ class _AdminWebAuthRouterState extends State<_AdminWebAuthRouter> {
         future: _authorizationFor(user.id, session.accessToken),
         builder: (context, snapshot) {
           if (snapshot.connectionState != ConnectionState.done) {
+            if (_authorizationUserId == user.id && _lastAuthorizedForUser) {
+              return AdminShell(onLogout: app.logout);
+            }
             return const Scaffold(
               backgroundColor: AdminTheme.bgPrimary,
               body: Center(child: CircularProgressIndicator()),

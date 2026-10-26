@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../core/theme.dart';
+import '../core/neumorphic_theme.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart';
 
@@ -18,26 +18,31 @@ class PassengerBottomNav extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final bgColor = AppColors.navBgColor(isDark);
-    final borderColor = AppColors.navBorderColor(isDark);
-    final activeColor = AppColors.navActiveColor(isDark);
-    final inactiveColor = AppColors.navInactiveColor(isDark);
+    final navSurface = NeumorphicColors.surface(isDark);
+    final activeColor = NeumorphicColors.brandPrimary;
+    final inactiveColor = NeumorphicColors.textSecondary(isDark);
 
     return Container(
       decoration: BoxDecoration(
-        color: bgColor,
-        border: Border(
-          top: BorderSide(
-            color: borderColor,
-            width: 1,
+        color: navSurface,
+        boxShadow: [
+          BoxShadow(
+            color: NeumorphicColors.shadowDark(isDark).withValues(alpha: isDark ? 0.6 : 0.25),
+            offset: const Offset(0, -4),
+            blurRadius: 12,
           ),
-        ),
+          BoxShadow(
+            color: NeumorphicColors.shadowLight(isDark).withValues(alpha: isDark ? 0.15 : 0.7),
+            offset: const Offset(0, -1),
+            blurRadius: 3,
+          ),
+        ],
       ),
       child: SafeArea(
         top: false,
         child: Container(
-          height: 62,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
@@ -48,6 +53,7 @@ class PassengerBottomNav extends StatelessWidget {
                 label: l10n.navHome,
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
+                isDark: isDark,
                 onTap: () {
                   if (currentIndex != 0) onNavigate(AppScreen.passengerHome);
                 },
@@ -59,6 +65,7 @@ class PassengerBottomNav extends StatelessWidget {
                 label: l10n.navActivity,
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
+                isDark: isDark,
                 onTap: () {
                   if (currentIndex != 1) onNavigate(AppScreen.rides);
                 },
@@ -70,6 +77,7 @@ class PassengerBottomNav extends StatelessWidget {
                 label: l10n.navWallet,
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
+                isDark: isDark,
                 onTap: () {
                   if (currentIndex != 2) onNavigate(AppScreen.wallet);
                 },
@@ -81,6 +89,7 @@ class PassengerBottomNav extends StatelessWidget {
                 label: l10n.navProfile,
                 activeColor: activeColor,
                 inactiveColor: inactiveColor,
+                isDark: isDark,
                 onTap: () {
                   if (currentIndex != 3) onNavigate(AppScreen.profile);
                 },
@@ -99,36 +108,47 @@ class PassengerBottomNav extends StatelessWidget {
     required String label,
     required Color activeColor,
     required Color inactiveColor,
+    required bool isDark,
     required VoidCallback onTap,
   }) {
     final isSelected = currentIndex == index;
 
     return Expanded(
-      child: InkWell(
+      child: GestureDetector(
         onTap: onTap,
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              isSelected ? activeIcon : icon,
-              size: 22,
-              color: isSelected ? activeColor : inactiveColor,
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          decoration: isSelected
+              ? BoxDecoration(
+                  color: NeumorphicColors.brandPrimary.withValues(alpha: isDark ? 0.16 : 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                )
+              : null,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isSelected ? activeIcon : icon,
+                size: 22,
                 color: isSelected ? activeColor : inactiveColor,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-          ],
+              const SizedBox(height: 3),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? activeColor : inactiveColor,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
         ),
       ),
     );

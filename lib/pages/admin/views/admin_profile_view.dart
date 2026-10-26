@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../../services/password_change_service.dart';
 import '../../../services/supabase_service.dart';
 import '../../../state/app_state.dart';
 import '../../../core/constants.dart';
+import '../../password_change_page.dart';
 import '../admin_theme.dart';
 import '../widgets/admin_widgets.dart';
 
@@ -214,6 +216,28 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          onPressed: isLoading
+                              ? null
+                              : () {
+                                  Navigator.of(ctx).pop();
+                                  showPasswordChangeDialog(this.context);
+                                },
+                          icon: const Icon(Icons.mark_email_read_outlined,
+                              size: 16, color: AdminTheme.gold),
+                          label: const Text(
+                            'Verify with Email Code instead',
+                            style: TextStyle(
+                              color: AdminTheme.gold,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -279,12 +303,8 @@ class _AdminProfileViewState extends State<AdminProfileView> {
                             if (!ctx.mounted) return;
                             setModalState(() {
                               isLoading = false;
-                              final msg = e.toString();
-                              error = msg.startsWith('FormatException: ')
-                                  ? msg.replaceFirst('FormatException: ', '')
-                                  : (msg.startsWith('Exception: ')
-                                      ? msg.replaceFirst('Exception: ', '')
-                                      : 'Unable to update password: $e');
+                              error =
+                                  PasswordChangeService.formatErrorMessage(e);
                             });
                           }
                         },

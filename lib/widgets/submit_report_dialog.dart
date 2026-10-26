@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/neumorphic_theme.dart';
 import '../models/report_model.dart';
 import '../state/app_state.dart';
+import 'neumorphic_widgets.dart';
 
 /// Shared passenger/driver report form backed by [AppState.createReport].
 ///
@@ -19,6 +21,7 @@ Future<void> showSubmitReportDialog(
   String? reportedUserRole,
 }) {
   final app = context.read<AppState>();
+  final isDark = app.darkMode || Theme.of(context).brightness == Brightness.dark;
   final messenger = ScaffoldMessenger.of(context);
   final issueCtrl = TextEditingController();
   final messageCtrl = TextEditingController();
@@ -31,8 +34,16 @@ Future<void> showSubmitReportDialog(
     context: context,
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialogState) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(dialogTitle),
+        backgroundColor: NeumorphicColors.surface(isDark),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          dialogTitle,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: NeumorphicColors.text(isDark),
+          ),
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -41,24 +52,24 @@ Future<void> showSubmitReportDialog(
               if (rideId != null && rideId.trim().isNotEmpty) ...[
                 Container(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: NeumorphicDecorations.inset(
+                    isDark: isDark,
+                    radius: 12,
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.directions_car_outlined,
-                          size: 16, color: Color(0xFF6E5600)),
+                      Icon(Icons.directions_car_rounded,
+                          size: 16,
+                          color: isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Ride: $rideId',
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade800,
+                            fontWeight: FontWeight.w700,
+                            color: NeumorphicColors.text(isDark),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -66,13 +77,38 @@ Future<void> showSubmitReportDialog(
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
               ],
               DropdownButtonFormField<String>(
                 initialValue: selectedType,
-                decoration: const InputDecoration(
+                dropdownColor: NeumorphicColors.surface(isDark),
+                style: TextStyle(
+                  color: NeumorphicColors.text(isDark),
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: InputDecoration(
                   labelText: 'Category',
-                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(
+                    color: NeumorphicColors.subtext(isDark),
+                    fontSize: 13,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: NeumorphicColors.brandPrimary,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
                 items: ReportType.all
                     .map((t) => DropdownMenuItem(
@@ -83,25 +119,73 @@ Future<void> showSubmitReportDialog(
                     : (v) => setDialogState(
                         () => selectedType = v ?? ReportType.other),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextField(
                 controller: issueCtrl,
                 enabled: !isSubmitting,
-                decoration: const InputDecoration(
+                style: TextStyle(color: NeumorphicColors.text(isDark)),
+                decoration: InputDecoration(
                   labelText: 'Subject / Issue',
                   hintText: 'e.g. Fare inquiry, Lost item',
-                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(
+                    color: NeumorphicColors.subtext(isDark),
+                    fontSize: 13,
+                  ),
+                  hintStyle: TextStyle(
+                    color: NeumorphicColors.subtext(isDark).withValues(alpha: 0.6),
+                    fontSize: 13,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: NeumorphicColors.brandPrimary,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               TextField(
                 controller: messageCtrl,
                 enabled: !isSubmitting,
                 maxLines: 3,
-                decoration: const InputDecoration(
+                style: TextStyle(color: NeumorphicColors.text(isDark)),
+                decoration: InputDecoration(
                   labelText: 'Description',
                   hintText: 'Please describe the details of your request...',
-                  border: OutlineInputBorder(),
+                  labelStyle: TextStyle(
+                    color: NeumorphicColors.subtext(isDark),
+                    fontSize: 13,
+                  ),
+                  hintStyle: TextStyle(
+                    color: NeumorphicColors.subtext(isDark).withValues(alpha: 0.6),
+                    fontSize: 13,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(
+                      color: NeumorphicColors.brandPrimary,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
               ),
               if (errorText != null) ...[
@@ -116,80 +200,82 @@ Future<void> showSubmitReportDialog(
         actions: [
           TextButton(
             onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF6E5600),
-              foregroundColor: Colors.white,
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                color: NeumorphicColors.subtext(isDark),
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            onPressed: isSubmitting
-                ? null
-                : () async {
-                    final title = issueCtrl.text.trim();
-                    final description = messageCtrl.text.trim();
-                    if (title.isEmpty || description.isEmpty) {
-                      setDialogState(() => errorText =
-                          'Please enter a subject and description.');
-                      return;
-                    }
-                    final user = app.currentUser;
-                    if (user == null) {
-                      setDialogState(() =>
-                          errorText = 'Please sign in to submit a report.');
-                      return;
-                    }
-                    setDialogState(() {
-                      isSubmitting = true;
-                      errorText = null;
-                    });
-                    try {
-                      await app.createReport(FireReport(
-                        id: 'rep_${DateTime.now().millisecondsSinceEpoch}',
-                        reporterId: user.id,
-                        reporterName:
-                            user.fullName.isEmpty ? 'User' : user.fullName,
-                        reporterRole: user.role,
-                        reporterMobile:
-                            user.mobile.isEmpty ? null : user.mobile,
-                        reportedUserId: reportedUserId,
-                        reportedUserName: reportedUserName,
-                        reportedUserRole: reportedUserRole,
-                        rideId: (rideId?.trim().isNotEmpty ?? false)
-                            ? rideId!.trim()
-                            : null,
-                        type: selectedType,
-                        title: title,
-                        description: description,
-                        status: ReportStatus.pending,
-                        createdAt: DateTime.now(),
-                      ));
-                      if (ctx.mounted) Navigator.pop(ctx);
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                              'Report submitted successfully! Our team will review it shortly.'),
-                          backgroundColor: Color(0xFF059669),
-                        ),
-                      );
-                    } catch (e) {
-                      debugPrint('[Reports] submit failed: $e');
-                      if (ctx.mounted) {
-                        setDialogState(() {
-                          isSubmitting = false;
-                          errorText =
-                              'Unable to submit report. Please try again.\n$e';
-                        });
+          ),
+          SizedBox(
+            width: 110,
+            child: NeumorphicButton(
+              text: 'Submit',
+              height: 42,
+              isLoading: isSubmitting,
+              accentColor: NeumorphicColors.brandPrimary,
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      final title = issueCtrl.text.trim();
+                      final description = messageCtrl.text.trim();
+                      if (title.isEmpty || description.isEmpty) {
+                        setDialogState(() => errorText =
+                            'Please enter a subject and description.');
+                        return;
                       }
-                    }
-                  },
-            child: isSubmitting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('Submit'),
+                      final user = app.currentUser;
+                      if (user == null) {
+                        setDialogState(() =>
+                            errorText = 'Please sign in to submit a report.');
+                        return;
+                      }
+                      setDialogState(() {
+                        isSubmitting = true;
+                        errorText = null;
+                      });
+                      try {
+                        await app.createReport(FireReport(
+                          id: 'rep_${DateTime.now().millisecondsSinceEpoch}',
+                          reporterId: user.id,
+                          reporterName:
+                              user.fullName.isEmpty ? 'User' : user.fullName,
+                          reporterRole: user.role,
+                          reporterMobile:
+                              user.mobile.isEmpty ? null : user.mobile,
+                          reportedUserId: reportedUserId,
+                          reportedUserName: reportedUserName,
+                          reportedUserRole: reportedUserRole,
+                          rideId: (rideId?.trim().isNotEmpty ?? false)
+                              ? rideId!.trim()
+                              : null,
+                          type: selectedType,
+                          title: title,
+                          description: description,
+                          status: ReportStatus.pending,
+                          createdAt: DateTime.now(),
+                        ));
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Report submitted successfully! Our team will review it shortly.'),
+                            backgroundColor: Color(0xFF059669),
+                          ),
+                        );
+                      } catch (e) {
+                        debugPrint('[Reports] submit failed: $e');
+                        if (ctx.mounted) {
+                          setDialogState(() {
+                            isSubmitting = false;
+                            errorText =
+                                'Unable to submit report. Please try again.\n$e';
+                          });
+                        }
+                      }
+                    },
+            ),
           ),
         ],
       ),

@@ -343,7 +343,9 @@ class SyncService {
 
     try {
       await SupabaseService.instance.syncAllFromLocal(db);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('SyncService non-fatal note: $e');
+    }
 
     final remaining = await pendingCount();
     return SyncResult(

@@ -5,6 +5,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 int _nextRealtimeTopicId = 0;
 
+/// Capped exponential backoff for realtime channel rejoin attempts:
+/// 1s, 2s, 4s, 8s, 16s, then 20s forever. Never returns a "give up" value,
+/// so channels always recover once mobile signal returns.
+@visibleForTesting
+int realtimeReconnectDelayMs(int consecutiveFailures) {
+  final attempt = consecutiveFailures < 1 ? 1 : consecutiveFailures;
+  final exponent = attempt - 1 > 5 ? 5 : attempt - 1;
+  final delay = 1000 * (1 << exponent);
+  return delay > 20000 ? 20000 : delay;
+}
+
 /// Builds one lifecycle-owned Postgres Changes stream.
 ///
 /// Supabase's convenience `stream()` API is useful for simple lists, but it
@@ -39,12 +50,14 @@ Stream<T> realtimeQueryStream<T>({
     var refreshQueued = false;
     var requestedRefreshVersion = 0;
     var hasSubscribed = false;
+    var hasEmittedValue = false;
+    var consecutiveChannelFailures = 0;
     var reconnectScheduled = false;
     RealtimeChannel? channel;
     Timer? reconnectTimer;
-    DateTime _lastFetchTime = DateTime.fromMillisecondsSinceEpoch(0);
-    Timer? _throttleTimer;
-    Timer? _pollTimer;
+    DateTime lastFetchTime = DateTime.fromMillisecondsSinceEpoch(0);
+    Timer? throttleTimer;
+    Timer? pollTimer;
     late void Function() attach;
 
     String statusName(RealtimeSubscribeStatus status) => switch (status) {
@@ -66,11 +79,11 @@ Stream<T> realtimeQueryStream<T>({
 
       if (throttle != null) {
         final now = DateTime.now();
-        final timeSinceLastFetch = now.difference(_lastFetchTime);
+        final timeSinceLastFetch = now.difference(lastFetchTime);
         if (timeSinceLastFetch < throttle) {
-          if (_throttleTimer?.isActive != true) {
-            _throttleTimer = Timer(throttle - timeSinceLastFetch, () {
-              _throttleTimer = null;
+          if (throttleTimer?.isActive != true) {
+            throttleTimer = Timer(throttle - timeSinceLastFetch, () {
+              throttleTimer = null;
               if (!cancelled) refresh('throttled_retry:$source');
             });
           }
@@ -84,15 +97,19 @@ Stream<T> realtimeQueryStream<T>({
       }
 
       refreshRunning = true;
-      _lastFetchTime = DateTime.now();
+      lastFetchTime = DateTime.now();
       do {
         refreshQueued = false;
         final fetchVersion = requestedRefreshVersion;
+        final stopwatch = Stopwatch()..start();
         try {
           final value = await fetch();
+          stopwatch.stop();
           if (!cancelled && fetchVersion == requestedRefreshVersion) {
+            hasEmittedValue = true;
             debugPrint('[SakayTa][Realtime] feature=$feature table=$table '
                 'filter=$filterDescription source=$source '
+                'durationMs=${stopwatch.elapsedMilliseconds} '
                 'status=FETCH_SUCCESS');
             controller.add(value);
           } else if (!cancelled) {
@@ -101,11 +118,15 @@ Stream<T> realtimeQueryStream<T>({
             refreshQueued = true;
           }
         } catch (error, stackTrace) {
+          stopwatch.stop();
           if (!cancelled && fetchVersion == requestedRefreshVersion) {
             debugPrint('[SakayTa][Realtime] feature=$feature table=$table '
                 'filter=$filterDescription source=$source '
+                'durationMs=${stopwatch.elapsedMilliseconds} '
                 'status=FETCH_ERROR error=$error');
-            controller.addError(error, stackTrace);
+            if (!hasEmittedValue) {
+              controller.addError(error, stackTrace);
+            }
           } else if (!cancelled) {
             refreshQueued = true;
           }
@@ -118,9 +139,17 @@ Stream<T> realtimeQueryStream<T>({
       if (cancelled || reconnectScheduled || channel != failedChannel) {
         return;
       }
+      consecutiveChannelFailures++;
+      // Never give up permanently: weak rural signal produces bursts of
+      // channel errors. Back off (1s, 2s, 4s, 8s, 16s, then 20s cap) while the
+      // poll timer keeps data fresh, and rejoin as soon as signal returns.
       reconnectScheduled = true;
-      logStatus('RECONNECT_SCHEDULED', error);
-      reconnectTimer = Timer(const Duration(milliseconds: 750), () async {
+      final delayMs = realtimeReconnectDelayMs(consecutiveChannelFailures);
+      logStatus('RECONNECT_SCHEDULED delayMs=$delayMs', error);
+      // Pull authoritative data right away so a missed event during the
+      // drop is not lost while the channel is down.
+      unawaited(refresh('channel_error'));
+      reconnectTimer = Timer(Duration(milliseconds: delayMs), () async {
         reconnectScheduled = false;
         if (cancelled || channel != failedChannel) return;
         try {
@@ -162,15 +191,13 @@ Stream<T> realtimeQueryStream<T>({
         logStatus(statusName(status), error);
         switch (status) {
           case RealtimeSubscribeStatus.subscribed:
+            consecutiveChannelFailures = 0;
             if (hasSubscribed) unawaited(refresh('reconnected'));
             hasSubscribed = true;
             break;
           case RealtimeSubscribeStatus.channelError:
           case RealtimeSubscribeStatus.timedOut:
           case RealtimeSubscribeStatus.closed:
-            controller.addError(
-              RealtimeSubscribeException(status, error),
-            );
             scheduleReconnect(nextChannel, error);
             break;
         }
@@ -182,7 +209,7 @@ Stream<T> realtimeQueryStream<T>({
     // screen subscribed must still be visible on first render.
     unawaited(refresh('initial'));
     if (pollInterval != null && pollInterval > Duration.zero) {
-      _pollTimer = Timer.periodic(
+      pollTimer = Timer.periodic(
         pollInterval,
         (_) => unawaited(refresh('poll')),
       );
@@ -191,8 +218,8 @@ Stream<T> realtimeQueryStream<T>({
     controller.onCancel = () async {
       cancelled = true;
       reconnectTimer?.cancel();
-      _pollTimer?.cancel();
-      _throttleTimer?.cancel();
+      pollTimer?.cancel();
+      throttleTimer?.cancel();
       final activeChannel = channel;
       channel = null;
       if (activeChannel != null) {

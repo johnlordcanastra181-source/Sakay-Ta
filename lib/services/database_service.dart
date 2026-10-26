@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'package:bcrypt/bcrypt.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sqflite_common/sqlite_api.dart';
 import '../core/constants.dart';
+import '../core/logger.dart';
 import '../models/admin_account.dart';
 import '../models/report_model.dart';
 import '../models/firestore_models.dart';
@@ -19,7 +21,9 @@ class DatabaseService {
     try {
       final host = Uri.base.host.toLowerCase();
       return host == 'localhost' || host == '127.0.0.1' || host == '0.0.0.0';
-    } catch (_) {
+    } catch (e, s) {
+      AppLogger.debug('DatabaseService.isLocalhostWeb note: $e',
+          error: e, stackTrace: s);
       return false;
     }
   }
@@ -53,13 +57,13 @@ class DatabaseService {
     return openAppDatabase(
       'sakay_ta.db',
       version: 11,
-      // SQLite is intentionally used as a cache/offline mirror. Firebase is
-      // the source of truth, so local writes must not fail because a related
-      // record has not been cached yet.
       onConfigure: (db) async {
         try {
-          await db.execute('PRAGMA foreign_keys = OFF');
-        } catch (_) {}
+          await db.execute('PRAGMA foreign_keys = ON;');
+        } catch (e, s) {
+          AppLogger.debug('DatabaseService PRAGMA foreign_keys note: $e',
+              error: e, stackTrace: s);
+        }
       },
       onCreate: (db, version) => _createTables(db),
       onUpgrade: (db, oldVersion, newVersion) =>
@@ -82,7 +86,7 @@ class DatabaseService {
         rejection_reason TEXT,
         is_online INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL,
-        rating REAL NOT NULL DEFAULT 5.0,
+        rating REAL NOT NULL DEFAULT 0.0,
         rating_count INTEGER NOT NULL DEFAULT 0,
         acceptance_count INTEGER NOT NULL DEFAULT 0,
         acceptance_total INTEGER NOT NULL DEFAULT 0,
@@ -314,6 +318,12 @@ class DatabaseService {
   }
 
   static String hashPassword(String password) {
+    return BCrypt.hashpw(password, BCrypt.gensalt(logRounds: 6));
+  }
+
+  /// Legacy 32-bit FNV-1a hash retained strictly for backward-compatible
+  /// password migration and deterministic OTP token deduplication.
+  static String legacyFnv1aHash(String password) {
     var hash = 0x811c9dc5;
     final bytes = ('sakay_ta::$password').codeUnits;
     for (final b in bytes) {
@@ -321,6 +331,22 @@ class DatabaseService {
       hash = (hash * 0x01000193) & 0xFFFFFFFF;
     }
     return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  /// Verifies [password] against [storedHash], supporting both salted bcrypt
+  /// (`$2a$`/`$2b$`) and legacy 8-character FNV-1a hashes during migration.
+  static bool verifyPassword(String password, String storedHash) {
+    if (storedHash.isEmpty) return false;
+    if (!storedHash.startsWith(r'$2') && storedHash.length == 8) {
+      return legacyFnv1aHash(password) == storedHash;
+    }
+    try {
+      return BCrypt.checkpw(password, storedHash);
+    } catch (e, s) {
+      AppLogger.debug('DatabaseService.verifyPassword note: $e',
+          error: e, stackTrace: s);
+      return false;
+    }
   }
 
   int _firstIntValue(List<Map<String, Object?>> list) {
@@ -366,25 +392,25 @@ class DatabaseService {
       await db.insert('fare_matrix', {
         'id': 'fm-1',
         'vehicle_type': 'tricycle',
-        'base_fare': 15.0,
-        'base_km': 1.0,
-        'per_km_rate': 3.0,
-        'night_diff_percent': 10.0,
-        'senior_discount_percent': 20.0,
-        'student_discount_percent': 20.0,
-        'pwd_discount_percent': 20.0,
+        'base_fare': 0.0,
+        'base_km': 0.0,
+        'per_km_rate': 5.0,
+        'night_diff_percent': 0.0,
+        'senior_discount_percent': 0.0,
+        'student_discount_percent': 0.0,
+        'pwd_discount_percent': 0.0,
         'effective_date': now,
       });
       await db.insert('fare_matrix', {
         'id': 'fm-2',
         'vehicle_type': 'habal_habal',
         'base_fare': 20.0,
-        'base_km': 1.0,
-        'per_km_rate': 4.0,
-        'night_diff_percent': 15.0,
-        'senior_discount_percent': 20.0,
-        'student_discount_percent': 20.0,
-        'pwd_discount_percent': 20.0,
+        'base_km': 0.0,
+        'per_km_rate': 5.0,
+        'night_diff_percent': 0.0,
+        'senior_discount_percent': 0.0,
+        'student_discount_percent': 0.0,
+        'pwd_discount_percent': 0.0,
         'effective_date': now,
       });
     }
@@ -437,11 +463,17 @@ class DatabaseService {
               'reporter_id IN (?, ?, ?, ?) OR reported_user_id IN (?, ?, ?, ?)',
           whereArgs: [...testIds, ...testIds],
         );
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
       try {
         await db.delete('toda_associations',
             where: 'id LIKE ?', whereArgs: ['toda-%']);
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
     } catch (e) {
       debugPrint('DatabaseService: _purgeTestAccounts note ($e)');
     }
@@ -663,42 +695,38 @@ class DatabaseService {
       }
     }
 
-    // Seed default admin account into admin_accounts table
-    try {
-      final existingAdmin = await db.query(
-        'admin_accounts',
-        where: 'id = ? OR email = ?',
-        whereArgs: ['super-admin-root', 'johnlordcanastra@sakayta.app'],
-        limit: 1,
-      );
-      if (existingAdmin.isEmpty) {
-        await db.insert('admin_accounts', {
-          'id': 'super-admin-root',
-          'full_name': 'John Lord Canastra',
-          'email': 'johnlordcanastra@sakayta.app',
-          'mobile': '09000000000',
-          'password_hash': hashPassword('admin09876'),
-          'role': 'super_admin',
-          'status': 'active',
-          'permissions': 'all',
-          'department': 'HQ Management',
-          'created_at': 1704067200000,
-        });
-      } else {
-        // Update password and role to super_admin
-        await db.update(
+    // Seed local test admin account only if SEED_ADMIN_PASSWORD is provided via --dart-define
+    const seedAdminPassword = String.fromEnvironment('SEED_ADMIN_PASSWORD');
+    const seedAdminEmail = String.fromEnvironment(
+      'SEED_ADMIN_EMAIL',
+      defaultValue: 'admin@sakayta.local',
+    );
+    if (kDebugMode && seedAdminPassword.isNotEmpty) {
+      try {
+        final existingAdmin = await db.query(
           'admin_accounts',
-          {
-            'password_hash': hashPassword('admin09876'),
-            'role': 'super_admin',
-            'full_name': 'John Lord Canastra',
-          },
           where: 'id = ? OR email = ?',
-          whereArgs: ['super-admin-root', 'johnlordcanastra@sakayta.app'],
+          whereArgs: ['super-admin-root', seedAdminEmail],
+          limit: 1,
         );
+        if (existingAdmin.isEmpty) {
+          await db.insert('admin_accounts', {
+            'id': 'super-admin-root',
+            'full_name': 'Local Test Super Admin',
+            'email': seedAdminEmail,
+            'mobile': '09000000000',
+            'password_hash': hashPassword(seedAdminPassword),
+            'role': 'super_admin',
+            'status': 'active',
+            'permissions': 'all',
+            'department': 'HQ Management',
+            'created_at': 1704067200000,
+          });
+        }
+      } catch (e, s) {
+        AppLogger.debug('DatabaseService: _seedDefaultAccounts admin note ($e)',
+            error: e, stackTrace: s);
       }
-    } catch (e) {
-      debugPrint('DatabaseService: _seedDefaultAccounts admin note ($e)');
     }
   }
 
@@ -739,10 +767,16 @@ class DatabaseService {
       // Driver live GPS coordinates (used by the nearby-drivers search).
       try {
         await db.execute('ALTER TABLE users ADD COLUMN latitude REAL');
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
       try {
         await db.execute('ALTER TABLE users ADD COLUMN longitude REAL');
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
     }
     if (oldVersion < 6) {
       try {
@@ -750,7 +784,10 @@ class DatabaseService {
         await db.execute(
           'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0',
         );
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
     }
     if (oldVersion < 7) {
       try {
@@ -758,7 +795,10 @@ class DatabaseService {
         await db.execute(
           'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0',
         );
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
     }
     if (oldVersion < 8) {
       // Migrate users table to remove rigid NOT NULL UNIQUE from mobile and enable partial unique indexes
@@ -777,7 +817,7 @@ class DatabaseService {
             rejection_reason TEXT,
             is_online INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
-            rating REAL NOT NULL DEFAULT 5.0,
+            rating REAL NOT NULL DEFAULT 0.0,
             rating_count INTEGER NOT NULL DEFAULT 0,
             acceptance_count INTEGER NOT NULL DEFAULT 0,
             acceptance_total INTEGER NOT NULL DEFAULT 0,
@@ -818,7 +858,10 @@ class DatabaseService {
     if (oldVersion < 9) {
       try {
         await db.execute('ALTER TABLE users ADD COLUMN address TEXT');
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
       try {
         await db.execute(
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile) WHERE mobile IS NOT NULL AND mobile != \'\'',
@@ -833,7 +876,10 @@ class DatabaseService {
     if (oldVersion < 10) {
       try {
         await db.execute('ALTER TABLE users ADD COLUMN address TEXT');
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
       try {
         await db.execute(
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mobile ON users(mobile) WHERE mobile IS NOT NULL AND mobile != \'\'',
@@ -856,61 +902,91 @@ class DatabaseService {
         if (!userCols.contains('address')) {
           try {
             await db.execute('ALTER TABLE users ADD COLUMN address TEXT');
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('email')) {
           try {
             await db.execute('ALTER TABLE users ADD COLUMN email TEXT');
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('email_verified')) {
           try {
             await db.execute(
               'ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0',
             );
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('latitude')) {
           try {
             await db.execute('ALTER TABLE users ADD COLUMN latitude REAL');
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('longitude')) {
           try {
             await db.execute('ALTER TABLE users ADD COLUMN longitude REAL');
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('rejection_reason')) {
           try {
             await db
                 .execute('ALTER TABLE users ADD COLUMN rejection_reason TEXT');
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('verified_at')) {
           try {
             await db
                 .execute('ALTER TABLE users ADD COLUMN verified_at INTEGER');
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('profile_photo_url')) {
           try {
             await db
                 .execute('ALTER TABLE users ADD COLUMN profile_photo_url TEXT');
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('location_updated_at')) {
           try {
             await db.execute(
               'ALTER TABLE users ADD COLUMN location_updated_at INTEGER',
             );
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
         if (!userCols.contains('avatar_color')) {
           try {
             await db.execute(
               'ALTER TABLE users ADD COLUMN avatar_color INTEGER NOT NULL DEFAULT 0',
             );
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
         }
 
         try {
@@ -920,7 +996,10 @@ class DatabaseService {
           await db.execute(
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL AND email != \'\'',
           );
-        } catch (_) {}
+        } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
       }
 
       final driverCols = await _getTableColumns(db, 'drivers');
@@ -971,7 +1050,10 @@ class DatabaseService {
             try {
               await db.execute(
                   'ALTER TABLE drivers ADD COLUMN ${entry.key} ${entry.value}');
-            } catch (_) {}
+            } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
           }
         }
       }
@@ -994,7 +1076,10 @@ class DatabaseService {
             try {
               await db.execute(
                   'ALTER TABLE trip ADD COLUMN ${entry.key} ${entry.value}');
-            } catch (_) {}
+            } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
           }
         }
       }
@@ -1078,7 +1163,10 @@ class DatabaseService {
           'ALTER TABLE sync_queue ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0',
         );
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_sync_queue_created ON sync_queue(created_at ASC)',
     );
@@ -1503,7 +1591,10 @@ class DatabaseService {
         if (raw != null) {
           notes = List<String>.from(jsonDecode(raw) as List);
         }
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
 
       return FireReport(
         id: r['id'] as String,
@@ -1564,7 +1655,10 @@ class DatabaseService {
     try {
       final raw = rows.first['admin_notes'] as String?;
       if (raw != null) notes = List<String>.from(jsonDecode(raw) as List);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
     notes.add(note);
 
     await db.update(
@@ -1824,7 +1918,10 @@ class DatabaseService {
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
   }
 
   Future<String?> getMapCache(String key) async {
@@ -1858,7 +1955,10 @@ class DatabaseService {
         where: 'expires_at < ?',
         whereArgs: [now],
       );
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('DatabaseService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
   }
 
   Future<void> close() async {

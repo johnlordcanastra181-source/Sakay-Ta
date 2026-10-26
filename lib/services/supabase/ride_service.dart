@@ -228,7 +228,9 @@ class SupabaseRideService {
       if (id != null) {
         await _tripsRef.upsert(bookingMap);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('RideService non-fatal note: $e');
+    }
   }
 
   Future<void> saveChatMessage(ChatMessage message) async {

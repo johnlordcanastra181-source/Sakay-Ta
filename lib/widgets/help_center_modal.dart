@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
-import 'submit_report_dialog.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../core/neumorphic_theme.dart';
+import '../state/app_state.dart';
+import 'neumorphic_widgets.dart';
+import 'submit_report_dialog.dart';
 
 class HelpCenterModal extends StatefulWidget {
   const HelpCenterModal({super.key});
@@ -72,6 +77,9 @@ class _HelpCenterModalState extends State<HelpCenterModal> {
 
   @override
   Widget build(BuildContext context) {
+    final app = context.watch<AppState>();
+    final isDark = app.darkMode || Theme.of(context).brightness == Brightness.dark;
+
     final filteredFaqs = _searchQuery.isEmpty
         ? _faqs
         : _faqs
@@ -87,9 +95,18 @@ class _HelpCenterModalState extends State<HelpCenterModal> {
         maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: NeumorphicColors.surface(isDark),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.5)
+                : const Color(0xFFA6B4C9).withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, -6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -98,35 +115,52 @@ class _HelpCenterModalState extends State<HelpCenterModal> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Help & Support Center',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF1E1E1E),
+                  color: NeumorphicColors.text(isDark),
+                  letterSpacing: -0.3,
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close_rounded),
+                icon: Icon(
+                  Icons.close_rounded,
+                  color: NeumorphicColors.subtext(isDark),
+                ),
                 onPressed: () => Navigator.pop(context),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
 
           // Search Field
-          TextField(
-            controller: _searchCtrl,
-            onChanged: (v) => setState(() => _searchQuery = v),
-            decoration: InputDecoration(
-              hintText: 'Search help topics and FAQs...',
-              prefixIcon: const Icon(Icons.search_rounded),
-              filled: true,
-              fillColor: const Color(0xFFF3F4F6),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
+          Container(
+            decoration: NeumorphicDecorations.inset(
+              isDark: isDark,
+              radius: 14,
+            ),
+            child: TextField(
+              controller: _searchCtrl,
+              style: TextStyle(
+                color: NeumorphicColors.text(isDark),
+                fontSize: 14,
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v),
+              decoration: InputDecoration(
+                hintText: 'Search help topics and FAQs...',
+                hintStyle: TextStyle(
+                  color: NeumorphicColors.subtext(isDark).withValues(alpha: 0.7),
+                  fontSize: 13.5,
+                ),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: NeumorphicColors.subtext(isDark),
+                ),
+                filled: false,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                border: InputBorder.none,
               ),
             ),
           ),
@@ -136,138 +170,160 @@ class _HelpCenterModalState extends State<HelpCenterModal> {
           Row(
             children: [
               Expanded(
-                child: InkWell(
+                child: NeumorphicCard(
                   onTap: () => _callNumber('911'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFEE2E2),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: const [
-                        Icon(Icons.emergency_rounded,
-                            color: Color(0xFFDC2626), size: 20),
-                        SizedBox(height: 4),
-                        Text(
-                          'Emergency (911)',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFDC2626),
-                          ),
+                  padding: const EdgeInsets.all(12),
+                  radius: 14,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEE2E2),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
+                        child: const Icon(
+                          Icons.emergency_rounded,
+                          color: Color(0xFFDC2626),
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Emergency (911)',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFDC2626),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: InkWell(
+                child: NeumorphicCard(
                   onTap: () => _callNumber('09178887252'),
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECFDF5),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: const [
-                        Icon(Icons.phone_in_talk_rounded,
-                            color: Color(0xFF059669), size: 20),
-                        SizedBox(height: 4),
-                        Text(
-                          'Hotline Support',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF059669),
-                          ),
+                  padding: const EdgeInsets.all(12),
+                  radius: 14,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
+                        child: const Icon(
+                          Icons.phone_in_talk_rounded,
+                          color: Color(0xFF059669),
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Hotline Support',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF059669),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: InkWell(
+                child: NeumorphicCard(
                   onTap: _showTicketDialog,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEEF2FF),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: const [
-                        Icon(Icons.chat_bubble_outline_rounded,
-                            color: Color(0xFF4F46E5), size: 20),
-                        SizedBox(height: 4),
-                        Text(
-                          'Send Ticket',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4F46E5),
-                          ),
+                  padding: const EdgeInsets.all(12),
+                  radius: 14,
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? NeumorphicColors.brandPrimary.withValues(alpha: 0.2)
+                              : const Color(0xFFFFF7ED),
+                          shape: BoxShape.circle,
                         ),
-                      ],
-                    ),
+                        child: Icon(
+                          Icons.chat_bubble_outline_rounded,
+                          color: NeumorphicColors.brandPrimary,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Send Ticket',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: NeumorphicColors.brandPrimary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          const Text(
+          Text(
             'Frequently Asked Questions',
             style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF374151),
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: NeumorphicColors.text(isDark),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
           // FAQ Accordion List
           Expanded(
             child: ListView.separated(
               itemCount: filteredFaqs.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemBuilder: (ctx, i) {
                 final faq = filteredFaqs[i];
-                return Theme(
-                  data:
-                      Theme.of(ctx).copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    title: Text(
-                      faq['question']!,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF1E1E1E),
-                      ),
-                    ),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          faq['answer']!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF4B5563),
-                            height: 1.4,
-                          ),
+                return NeumorphicCard(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  radius: 14,
+                  child: Theme(
+                    data: Theme.of(ctx).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      iconColor: NeumorphicColors.brandPrimary,
+                      collapsedIconColor: NeumorphicColors.subtext(isDark),
+                      title: Text(
+                        faq['question']!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: NeumorphicColors.text(isDark),
                         ),
                       ),
-                    ],
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            faq['answer']!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: NeumorphicColors.subtext(isDark),
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },

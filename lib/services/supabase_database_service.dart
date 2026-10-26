@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/constants.dart';
+import '../core/logger.dart';
 import '../core/supabase_config.dart';
 import '../models/admin_account.dart';
 import '../models/app_user.dart';
@@ -14,6 +15,7 @@ import '../models/driver_profile.dart';
 import '../models/firestore_models.dart';
 import '../models/philippine_address.dart';
 import '../models/report_model.dart';
+import '../models/saved_place.dart';
 import '../models/transaction.dart';
 import '../models/trip.dart';
 import 'driver_earnings_summary.dart';
@@ -254,13 +256,73 @@ class SupabaseDatabaseService {
 
   int _millis(Object? value) => _date(value)?.millisecondsSinceEpoch ?? 0;
 
+  @visibleForTesting
+  static final Map<String, ({String url, DateTime expiresAt})>
+      driverPhotoUrlCache = {};
+
+  Future<String> resolveDriverPhotoUrl(String? rawPath) async {
+    final trimmed = rawPath?.trim() ?? '';
+    if (trimmed.isEmpty) return '';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    var cleanPath = trimmed;
+    if (cleanPath.startsWith('avatars/')) {
+      cleanPath = cleanPath.substring('avatars/'.length);
+    }
+    final isDriverDocs = cleanPath.startsWith('driver-documents/') ||
+        cleanPath.startsWith('applications/') ||
+        cleanPath.contains('/profile/') ||
+        cleanPath.contains('profile_');
+    if (cleanPath.startsWith('driver-documents/')) {
+      cleanPath = cleanPath.substring('driver-documents/'.length);
+    }
+
+    if (isDriverDocs) {
+      final cached = driverPhotoUrlCache[cleanPath];
+      if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
+        return cached.url;
+      }
+      try {
+        final signed = await _client.storage
+            .from('driver-documents')
+            .createSignedUrl(cleanPath, 3600);
+        driverPhotoUrlCache[cleanPath] = (
+          url: signed,
+          expiresAt: DateTime.now().add(const Duration(minutes: 50)),
+        );
+        return signed;
+      } catch (error) {
+        debugPrint(
+            '[SakayTa][Storage] createSignedUrl fallback for $cleanPath: $error');
+        return _client.storage.from('driver-documents').getPublicUrl(cleanPath);
+      }
+    }
+
+    return _client.storage.from('avatars').getPublicUrl(cleanPath);
+  }
+
   String? _avatarUrl(Object? path, [Object? updatedAt]) {
     final value = path?.toString().trim();
     if (value == null || value.isEmpty) return null;
     if (value.startsWith('http://') || value.startsWith('https://')) {
       return value;
     }
-    String url = _client.storage.from('avatars').getPublicUrl(value);
+    var cleanPath = value;
+    if (cleanPath.startsWith('driver-documents/') ||
+        cleanPath.startsWith('applications/')) {
+      if (cleanPath.startsWith('driver-documents/')) {
+        cleanPath = cleanPath.substring('driver-documents/'.length);
+      }
+      final cached = driverPhotoUrlCache[cleanPath];
+      if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
+        return cached.url;
+      }
+    }
+    if (cleanPath.startsWith('avatars/')) {
+      cleanPath = cleanPath.substring('avatars/'.length);
+    }
+    String url = _client.storage.from('avatars').getPublicUrl(cleanPath);
     if (updatedAt != null) {
       final ms = _millis(updatedAt);
       if (ms > 0) {
@@ -796,7 +858,7 @@ class SupabaseDatabaseService {
       feature: 'nearby_drivers',
       table: 'driver_presence',
       throttle: const Duration(seconds: 3),
-      pollInterval: const Duration(seconds: 30),
+      pollInterval: const Duration(seconds: 8),
       filterDescription:
           'approved presence changes; vehicle=${vehicleType?.key ?? 'any'}',
       fetch: () => _fetchNearbyDrivers(
@@ -820,22 +882,46 @@ class SupabaseDatabaseService {
         'origin=${lat.toStringAsFixed(5)},${lng.toStringAsFixed(5)} '
         'radiusKm=${radiusKm.toStringAsFixed(1)} '
         'vehicle=${vehicleType?.key ?? 'any'}');
-    final result = await _client.rpc('nearby_drivers', params: {
-      'passenger_latitude': lat,
-      'passenger_longitude': lng,
-      'requested_vehicle': vehicleType?.key,
-      'radius_km': radiusKm,
-    });
+    dynamic result;
+    try {
+      result = await _client.rpc('nearby_drivers', params: {
+        'passenger_latitude': lat,
+        'passenger_longitude': lng,
+        'requested_vehicle': vehicleType?.key,
+        'radius_km': radiusKm,
+      });
+    } on PostgrestException catch (e, s) {
+      if (e.code == 'PGRST202' ||
+          e.code == '42883' ||
+          e.message.toLowerCase().contains('nearby_drivers')) {
+        AppLogger.warn(
+          'SupabaseDatabaseService: nearby_drivers RPC missing (${e.code}); falling back to direct driver_presence query.',
+          error: e,
+          stackTrace: s,
+        );
+        return _fetchNearbyDriversDirectFallback(
+          lat: lat,
+          lng: lng,
+          radiusKm: radiusKm,
+          vehicleType: vehicleType,
+        );
+      }
+      rethrow;
+    }
     final rawRows = result is List ? result : const <dynamic>[];
     final drivers = <NearbyDriver>[];
     var invalidRows = 0;
     for (final rawRow in rawRows) {
       try {
         final row = Map<String, dynamic>.from(rawRow as Map);
-        var photoUrl = row['profile_photo_path']?.toString() ?? '';
-        if (photoUrl.isNotEmpty && !photoUrl.startsWith('http')) {
-          photoUrl = _client.storage.from('avatars').getPublicUrl(photoUrl);
+        var rawPhoto = row['profile_photo_path']?.toString().trim();
+        if (rawPhoto == null || rawPhoto.isEmpty) {
+          final driverId = row['user_id']?.toString() ?? '';
+          if (driverId.isNotEmpty) {
+            rawPhoto = '$driverId/profile.jpg';
+          }
         }
+        final photoUrl = await resolveDriverPhotoUrl(rawPhoto);
         row['profile_photo_path'] = photoUrl;
         drivers.add(NearbyDriver.fromRpcMap(row));
       } catch (error) {
@@ -843,6 +929,43 @@ class SupabaseDatabaseService {
         debugPrint('[SakayTa][NearbyDrivers][invalid-row] $error');
       }
     }
+
+    // Resilient fallback: If RPC result did not include completed_trips (e.g. older RPC deployment),
+    // batch fetch completed trip count from public.rides.
+    if (drivers.isNotEmpty &&
+        rawRows.isNotEmpty &&
+        rawRows.first is Map &&
+        !(rawRows.first as Map).containsKey('completed_trips')) {
+      final driverIds = drivers
+          .map((d) => d.id)
+          .where((id) => id.isNotEmpty)
+          .toSet()
+          .toList();
+      if (driverIds.isNotEmpty) {
+        try {
+          final ridesResult = await _client
+              .from('rides')
+              .select('driver_id')
+              .inFilter('driver_id', driverIds)
+              .eq('status', 'completed');
+          final counts = <String, int>{};
+          for (final r in ridesResult) {
+            final dId = r['driver_id']?.toString();
+            if (dId != null && dId.isNotEmpty) {
+              counts[dId] = (counts[dId] ?? 0) + 1;
+            }
+          }
+          for (var i = 0; i < drivers.length; i++) {
+            final count = counts[drivers[i].id] ?? 0;
+            drivers[i] = drivers[i].copyWith(completedTrips: count);
+          }
+        } catch (e) {
+          debugPrint(
+              '[SakayTa][NearbyDrivers][completed_trips_fallback] error: $e');
+        }
+      }
+    }
+
     drivers.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
     final online = drivers.where((driver) => driver.isOnline).length;
     final available = drivers.where((driver) => driver.isAvailable).length;
@@ -852,6 +975,80 @@ class SupabaseDatabaseService {
         'invalid=$invalidRows online=$online available=$available '
         'bookable=$bookable');
     return drivers;
+  }
+
+  Future<List<NearbyDriver>> _fetchNearbyDriversDirectFallback({
+    required double lat,
+    required double lng,
+    required double radiusKm,
+    required VehicleType? vehicleType,
+  }) async {
+    try {
+      final rows = await _client
+          .from('driver_presence')
+          .select(
+            'driver_id, is_online, is_available, latitude, longitude, updated_at, '
+            'drivers!inner(vehicle_type, plate_number, rating_average, rating_count, total_trips, application_status), '
+            'profiles!inner(full_name, avatar_path)',
+          )
+          .eq('drivers.application_status', 'approved');
+
+      final origin = Geo(lat, lng);
+      final drivers = <NearbyDriver>[];
+      for (final raw in rows) {
+        try {
+          final row = Map<String, dynamic>.from(raw as Map);
+          final dMap = row['drivers'] is Map
+              ? Map<String, dynamic>.from(row['drivers'] as Map)
+              : <String, dynamic>{};
+          final pMap = row['profiles'] is Map
+              ? Map<String, dynamic>.from(row['profiles'] as Map)
+              : <String, dynamic>{};
+          final dLat = (row['latitude'] as num?)?.toDouble();
+          final dLng = (row['longitude'] as num?)?.toDouble();
+          if (dLat == null || dLng == null) continue;
+          final distKm = Geo.distanceKm(origin, Geo(dLat, dLng));
+          if (distKm > radiusKm) continue;
+          final vTypeStr = dMap['vehicle_type']?.toString() ?? '';
+          if (vehicleType != null &&
+              vTypeStr.toLowerCase() != vehicleType.key.toLowerCase()) {
+            continue;
+          }
+          final driverId = row['driver_id']?.toString() ?? '';
+          final rawPhoto =
+              pMap['avatar_path']?.toString() ?? '$driverId/profile.jpg';
+          final photoUrl = await resolveDriverPhotoUrl(rawPhoto);
+          drivers.add(
+            NearbyDriver.fromRpcMap({
+              'user_id': driverId,
+              'full_name': pMap['full_name']?.toString() ?? 'Driver',
+              'profile_photo_path': photoUrl,
+              'vehicle_type': vTypeStr,
+              'plate_number': dMap['plate_number']?.toString() ?? '',
+              'rating_average': dMap['rating_average'] ?? 0.0,
+              'rating_count': dMap['rating_count'] ?? 0,
+              'completed_trips': dMap['total_trips'] ?? 0,
+              'latitude': dLat,
+              'longitude': dLng,
+              'distance_km': distKm,
+              'is_online': row['is_online'] == true,
+              'is_available': row['is_available'] == true,
+              'has_active_ride': false,
+              'last_location_at': row['updated_at'],
+            }),
+          );
+        } catch (e, s) {
+          AppLogger.debug('NearbyDrivers direct fallback row note: $e',
+              error: e, stackTrace: s);
+        }
+      }
+      drivers.sort((a, b) => a.distanceKm.compareTo(b.distanceKm));
+      return drivers;
+    } catch (e, s) {
+      AppLogger.warn('NearbyDrivers direct fallback failed: $e',
+          error: e, stackTrace: s);
+      return const <NearbyDriver>[];
+    }
   }
 
   Future<void> saveDriverLocation({
@@ -895,6 +1092,7 @@ class SupabaseDatabaseService {
             fromCache: false,
           );
         },
+        pollInterval: const Duration(seconds: 4),
       );
 
   Future<void> setDriverAvailability(String userId, bool isOnline) async {
@@ -1342,6 +1540,34 @@ class SupabaseDatabaseService {
     }
   }
 
+  // --- Saved Places (public.saved_places) ---
+
+  Future<List<SavedPlace>> getSavedPlaces(String userId) async {
+    final rows = await _client
+        .from('saved_places')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    return (rows as List<dynamic>)
+        .map((row) => SavedPlace.fromMap(Map<String, Object?>.from(row as Map)))
+        .toList();
+  }
+
+  Future<void> saveSavedPlace(SavedPlace place) async {
+    await _client.from('saved_places').upsert(
+          place.toDatabaseRow(),
+          onConflict: 'id',
+        );
+  }
+
+  Future<void> deleteSavedPlace(String userId, String placeId) async {
+    await _client
+        .from('saved_places')
+        .delete()
+        .eq('user_id', userId)
+        .eq('id', placeId);
+  }
+
   Future<void> incrementPassengerRideCount(String userId) async {
     final row = await _client
         .from('passenger_profiles')
@@ -1392,6 +1618,7 @@ class SupabaseDatabaseService {
       'distance_km': trip.distanceKm,
       'duration_minutes': trip.durationMin,
       'payment_method': trip.paymentMethod,
+      'estimated_fare': trip.fare,
     });
 
     if (response is Map) {
@@ -1428,27 +1655,11 @@ class SupabaseDatabaseService {
   }
 
   Stream<Trip?> streamActiveTripForPassenger(String passengerId) =>
-      streamRideHistoryForPassenger(passengerId).map((rows) {
-        for (final trip in rows) {
-          if (kActiveRideStatuses.contains(trip.status)) return trip;
-        }
-        return null;
-      });
-
-  Stream<Trip?> streamActiveTripForDriver(String driverId) =>
-      streamRideHistoryForDriver(driverId).map((rows) {
-        for (final trip in rows) {
-          if (kActiveRideStatuses.contains(trip.status)) return trip;
-        }
-        return null;
-      });
-
-  Stream<List<Trip>> streamRideHistoryForPassenger(String passengerId) =>
-      realtimeQueryStream<List<Trip>>(
+      realtimeQueryStream<Trip?>(
         client: _client,
-        feature: 'passenger_ride_history',
+        feature: 'passenger_active_trip',
         table: 'rides',
-        filterDescription: 'passenger_id=$passengerId',
+        filterDescription: 'passenger_id=$passengerId;active_only',
         filters: [
           PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
@@ -1461,20 +1672,21 @@ class SupabaseDatabaseService {
               .from('rides')
               .select(_rideWithRatingSelect)
               .eq('passenger_id', passengerId)
-              .order('created_at', ascending: false);
-          return rows
-              .map((row) => _trip(Map<String, dynamic>.from(row)))
-              .toList();
+              .inFilter('status', kActiveRideStatuses.toList())
+              .order('created_at', ascending: false)
+              .limit(1);
+          if (rows.isEmpty) return null;
+          return _trip(Map<String, dynamic>.from(rows.first));
         },
-        pollInterval: const Duration(seconds: 15),
+        pollInterval: const Duration(seconds: 3),
       );
 
-  Stream<List<Trip>> streamRideHistoryForDriver(String driverId) =>
-      realtimeQueryStream<List<Trip>>(
+  Stream<Trip?> streamActiveTripForDriver(String driverId) =>
+      realtimeQueryStream<Trip?>(
         client: _client,
-        feature: 'driver_ride_history',
+        feature: 'driver_active_trip',
         table: 'rides',
-        filterDescription: 'driver_id=$driverId',
+        filterDescription: 'driver_id=$driverId;active_only',
         filters: [
           PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
@@ -1487,13 +1699,220 @@ class SupabaseDatabaseService {
               .from('rides')
               .select(_rideWithRatingSelect)
               .eq('driver_id', driverId)
-              .order('created_at', ascending: false);
-          return rows
-              .map((row) => _trip(Map<String, dynamic>.from(row)))
-              .toList();
+              .inFilter('status', kActiveRideStatuses.toList())
+              .order('created_at', ascending: false)
+              .limit(1);
+          if (rows.isEmpty) return null;
+          return _trip(Map<String, dynamic>.from(rows.first));
         },
+        pollInterval: const Duration(seconds: 3),
+      );
+
+  Future<List<Trip>> fetchRideHistoryForPassengerOnce(
+    String passengerId, {
+    int limit = 100,
+  }) async {
+    final sw = Stopwatch()..start();
+    final rows = await _client
+        .from('rides')
+        .select(_rideWithRatingSelect)
+        .eq('passenger_id', passengerId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    final result =
+        rows.map((row) => _trip(Map<String, dynamic>.from(row))).toList();
+    sw.stop();
+    debugPrint('[SakayTa][Perf][History] role=passenger uid=$passengerId '
+        'rows=${result.length} queryMs=${sw.elapsedMilliseconds}');
+    return result;
+  }
+
+  Future<List<Trip>> fetchRideHistoryForDriverOnce(
+    String driverId, {
+    int limit = 100,
+  }) async {
+    final sw = Stopwatch()..start();
+    final rows = await _client
+        .from('rides')
+        .select(_rideWithRatingSelect)
+        .eq('driver_id', driverId)
+        .order('created_at', ascending: false)
+        .limit(limit);
+    final result =
+        rows.map((row) => _trip(Map<String, dynamic>.from(row))).toList();
+    sw.stop();
+    debugPrint('[SakayTa][Perf][History] role=driver uid=$driverId '
+        'rows=${result.length} queryMs=${sw.elapsedMilliseconds}');
+    return result;
+  }
+
+  Stream<List<Trip>> streamRideHistoryForPassenger(
+    String passengerId, {
+    int limit = 100,
+  }) =>
+      realtimeQueryStream<List<Trip>>(
+        client: _client,
+        feature: 'passenger_ride_history',
+        table: 'rides',
+        filterDescription: 'passenger_id=$passengerId;limit=$limit',
+        filters: [
+          PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'passenger_id',
+            value: passengerId,
+          ),
+        ],
+        fetch: () => fetchRideHistoryForPassengerOnce(
+          passengerId,
+          limit: limit,
+        ),
+        pollInterval: const Duration(seconds: 20),
+      );
+
+  Stream<List<Trip>> streamRideHistoryForDriver(
+    String driverId, {
+    int limit = 100,
+  }) =>
+      realtimeQueryStream<List<Trip>>(
+        client: _client,
+        feature: 'driver_ride_history',
+        table: 'rides',
+        filterDescription: 'driver_id=$driverId;limit=$limit',
+        filters: [
+          PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'driver_id',
+            value: driverId,
+          ),
+        ],
+        fetch: () => fetchRideHistoryForDriverOnce(
+          driverId,
+          limit: limit,
+        ),
         pollInterval: const Duration(seconds: 30),
       );
+
+  Future<Map<String, ({String name, String plate, String? photoUrl, int avatarColor})>>
+      getDriverDisplayInfoBatch(Iterable<String> driverIds) async {
+    final uniqueIds = driverIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+    if (uniqueIds.isEmpty) return const {};
+
+    final sw = Stopwatch()..start();
+    final result =
+        <String, ({String name, String plate, String? photoUrl, int avatarColor})>{};
+
+    String? resolvePublicAvatar(String? rawPath) {
+      final trimmed = rawPath?.trim() ?? '';
+      if (trimmed.isEmpty) return null;
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return trimmed;
+      }
+      var cleanPath = trimmed;
+      if (cleanPath.startsWith('driver-documents/')) {
+        cleanPath = cleanPath.substring('driver-documents/'.length);
+      }
+      final cached = driverPhotoUrlCache[cleanPath];
+      if (cached != null && DateTime.now().isBefore(cached.expiresAt)) {
+        return cached.url;
+      }
+      if (cleanPath.contains('/profile/') || cleanPath.contains('profile_')) {
+        return _client.storage.from('driver-documents').getPublicUrl(cleanPath);
+      }
+      if (cleanPath.startsWith('avatars/')) {
+        cleanPath = cleanPath.substring('avatars/'.length);
+      }
+      return _client.storage.from('avatars').getPublicUrl(cleanPath);
+    }
+
+    try {
+      final rpcRows = await _client.rpc(
+        'get_ride_driver_display_info',
+        params: {'target_driver_ids': uniqueIds},
+      );
+      if (rpcRows is List) {
+        for (final item in rpcRows) {
+          if (item is! Map) continue;
+          final row = Map<String, dynamic>.from(item);
+          final id = row['driver_id']?.toString().trim() ?? '';
+          if (id.isEmpty) continue;
+          result[id] = (
+            name: row['full_name']?.toString().trim() ?? '',
+            plate: row['plate_number']?.toString().trim() ?? '',
+            photoUrl: resolvePublicAvatar(row['profile_photo_path']?.toString()),
+            avatarColor: (row['avatar_color'] as num?)?.toInt() ?? 0,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[SakayTa][Perf][History] RPC get_ride_driver_display_info '
+          'fallback triggered: $e');
+    }
+
+    final remainingIds =
+        uniqueIds.where((id) => !result.containsKey(id)).toList();
+    if (remainingIds.isNotEmpty) {
+      final platesById = <String, String>{};
+      final namesById = <String, String>{};
+      final photosById = <String, String?>{};
+      final colorsById = <String, int>{};
+
+      try {
+        final presenceRows = await _client
+            .from('driver_presence')
+            .select('driver_id,plate_number')
+            .inFilter('driver_id', remainingIds);
+        for (final raw in presenceRows) {
+          final row = Map<String, dynamic>.from(raw);
+          final id = row['driver_id']?.toString().trim() ?? '';
+          if (id.isNotEmpty) {
+            platesById[id] = row['plate_number']?.toString().trim() ?? '';
+          }
+        }
+      } catch (e, s) {
+        AppLogger.debug('SupabaseDatabaseService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
+
+      try {
+        final profileRows = await _client
+            .from('profiles')
+            .select('id,full_name,profile_photo_path,avatar_color')
+            .inFilter('id', remainingIds);
+        for (final raw in profileRows) {
+          final row = Map<String, dynamic>.from(raw);
+          final id = row['id']?.toString().trim() ?? '';
+          if (id.isNotEmpty) {
+            namesById[id] = row['full_name']?.toString().trim() ?? '';
+            photosById[id] =
+                resolvePublicAvatar(row['profile_photo_path']?.toString());
+            colorsById[id] = (row['avatar_color'] as num?)?.toInt() ?? 0;
+          }
+        }
+      } catch (e, s) {
+        AppLogger.debug('SupabaseDatabaseService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
+
+      for (final id in remainingIds) {
+        result[id] = (
+          name: namesById[id] ?? '',
+          plate: platesById[id] ?? '',
+          photoUrl: photosById[id],
+          avatarColor: colorsById[id] ?? 0,
+        );
+      }
+    }
+
+    sw.stop();
+    debugPrint('[SakayTa][Perf][History] batchDriverDisplayInfo '
+        'requested=${uniqueIds.length} resolved=${result.length} '
+        'durationMs=${sw.elapsedMilliseconds}');
+    return result;
+  }
 
   Stream<List<Trip>> streamIncomingRequestsForDriver({
     required String driverId,
@@ -1544,7 +1963,7 @@ class SupabaseDatabaseService {
                 ))
             .toList();
       },
-      pollInterval: const Duration(seconds: 15),
+      pollInterval: const Duration(seconds: 3),
     );
   }
 
@@ -1622,7 +2041,7 @@ class SupabaseDatabaseService {
               .maybeSingle();
           return row == null ? null : _trip(Map<String, dynamic>.from(row));
         },
-        pollInterval: const Duration(seconds: 15),
+        pollInterval: const Duration(seconds: 3),
       );
 
   Future<Trip?> getTrip(String tripId) async {
@@ -1723,6 +2142,7 @@ class SupabaseDatabaseService {
               .map((row) => _chat(Map<String, dynamic>.from(row)))
               .toList();
         },
+        pollInterval: const Duration(seconds: 4),
       );
 
   Future<void> saveRating(FireRating rating) async {
@@ -1922,6 +2342,28 @@ class SupabaseDatabaseService {
         'created_at': row['created_at'],
       });
 
+  Future<List<DriverEarning>> fetchDriverEarningsOnce(String driverId) async {
+    final sw = Stopwatch()..start();
+    const pageSize = 1000;
+    final earnings = <DriverEarning>[];
+    for (var offset = 0;; offset += pageSize) {
+      final rows = await _client
+          .from('driver_earnings')
+          .select()
+          .eq('driver_id', driverId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + pageSize - 1);
+      earnings
+          .addAll(rows.map((row) => _earning(Map<String, dynamic>.from(row))));
+      if (rows.length < pageSize) break;
+    }
+    sw.stop();
+    debugPrint('[SakayTa][Perf][Wallet] table=driver_earnings '
+        'driverId=$driverId rows=${earnings.length} '
+        'queryMs=${sw.elapsedMilliseconds}');
+    return earnings;
+  }
+
   Stream<List<DriverEarning>> streamDriverEarnings(String driverId) =>
       realtimeQueryStream<List<DriverEarning>>(
         client: _client,
@@ -1935,21 +2377,7 @@ class SupabaseDatabaseService {
             value: driverId,
           ),
         ],
-        fetch: () async {
-          const pageSize = 1000;
-          final earnings = <DriverEarning>[];
-          for (var offset = 0;; offset += pageSize) {
-            final rows = await _client
-                .from('driver_earnings')
-                .select()
-                .eq('driver_id', driverId)
-                .order('created_at', ascending: false)
-                .range(offset, offset + pageSize - 1);
-            earnings.addAll(
-                rows.map((row) => _earning(Map<String, dynamic>.from(row))));
-            if (rows.length < pageSize) return earnings;
-          }
-        },
+        fetch: () => fetchDriverEarningsOnce(driverId),
         pollInterval: const Duration(seconds: 30),
       );
 
@@ -2094,6 +2522,22 @@ class SupabaseDatabaseService {
   Future<void> recalculateDriverRating(String userId) =>
       _client.rpc('refresh_driver_rating', params: {'target_driver': userId});
 
+  Future<List<Withdrawal>> fetchWithdrawalsOnce(String driverId) async {
+    final sw = Stopwatch()..start();
+    final rows = await _client
+        .from('withdrawals')
+        .select()
+        .eq('driver_id', driverId)
+        .order('requested_at', ascending: false);
+    final result =
+        rows.map((row) => _withdrawal(Map<String, dynamic>.from(row))).toList();
+    sw.stop();
+    debugPrint('[SakayTa][Perf][Wallet] table=withdrawals '
+        'driverId=$driverId rows=${result.length} '
+        'queryMs=${sw.elapsedMilliseconds}');
+    return result;
+  }
+
   Stream<List<Withdrawal>> streamWithdrawals(String driverId) =>
       realtimeQueryStream<List<Withdrawal>>(
         client: _client,
@@ -2107,16 +2551,8 @@ class SupabaseDatabaseService {
             value: driverId,
           ),
         ],
-        fetch: () async {
-          final rows = await _client
-              .from('withdrawals')
-              .select()
-              .eq('driver_id', driverId)
-              .order('requested_at', ascending: false);
-          return rows
-              .map((row) => _withdrawal(Map<String, dynamic>.from(row)))
-              .toList();
-        },
+        fetch: () => fetchWithdrawalsOnce(driverId),
+        pollInterval: const Duration(seconds: 30),
       );
 
   Future<Map<String, dynamic>> saveToda(Map<String, dynamic> todaMap) async {

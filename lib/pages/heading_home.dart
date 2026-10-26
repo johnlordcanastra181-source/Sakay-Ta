@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
 import '../main.dart' hide Brand, Avatar;
-import '../services/supabase_service.dart';
+
 import '../state/app_state.dart';
 
 class HeadingHome extends StatelessWidget {

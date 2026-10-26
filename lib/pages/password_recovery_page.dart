@@ -1,5 +1,6 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../services/password_recovery_service.dart';
 
 Future<void> showPasswordRecoveryDialog(
@@ -58,17 +59,15 @@ class _PasswordRecoveryEmailScreenState
     }
   }
 
-  String _message(Object error) {
-    final value = error.toString().replaceFirst('Exception: ', '');
-    return value.replaceFirst('StateError: ', '');
-  }
+  String _message(Object error) =>
+      PasswordRecoveryService.formatErrorMessage(error);
 
   void _goToVerification() {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => PasswordRecoveryVerificationScreen(
-          email: _emailController.text.trim(),
+          email: _emailController.text.trim().toLowerCase(),
         ),
       ),
     );
@@ -188,6 +187,8 @@ class PasswordRecoveryVerificationScreen extends StatefulWidget {
 class _PasswordRecoveryVerificationScreenState
     extends State<PasswordRecoveryVerificationScreen> {
   final _codeController = TextEditingController();
+  Timer? _cooldownTimer;
+  int _cooldown = 0;
   bool _verifying = false;
   bool _resending = false;
   String? _error;
@@ -195,20 +196,45 @@ class _PasswordRecoveryVerificationScreenState
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     _codeController.dispose();
     super.dispose();
   }
 
+  void _startCooldown() {
+    _cooldownTimer?.cancel();
+    setState(() => _cooldown = 30);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_cooldown <= 1) {
+        timer.cancel();
+        setState(() => _cooldown = 0);
+      } else {
+        setState(() => _cooldown--);
+      }
+    });
+  }
+
   Future<void> _verify() async {
-    if (_verifying) return;
+    if (_verifying || _resending) return;
+    final code = _codeController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      setState(() {
+        _error = 'Enter the 6-digit verification code.';
+        _info = null;
+      });
+      return;
+    }
     setState(() {
       _verifying = true;
       _error = null;
       _info = null;
     });
     try {
-      await PasswordRecoveryService.verifyRecoveryOtp(
-          widget.email, _codeController.text);
+      await PasswordRecoveryService.verifyRecoveryOtp(widget.email, code);
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -218,8 +244,8 @@ class _PasswordRecoveryVerificationScreenState
       );
     } catch (error) {
       if (mounted) {
-        setState(() =>
-            _error = error.toString().replaceFirst('StateError: ', '').replaceFirst('Exception: ', ''));
+        setState(
+            () => _error = PasswordRecoveryService.formatErrorMessage(error));
       }
     } finally {
       if (mounted) setState(() => _verifying = false);
@@ -227,23 +253,29 @@ class _PasswordRecoveryVerificationScreenState
   }
 
   Future<void> _resend() async {
-    if (_resending) return;
+    if (_resending || _verifying || _cooldown > 0) return;
+    final previousCode = _codeController.text;
+    _codeController.clear();
     setState(() {
       _resending = true;
       _error = null;
       _info = null;
     });
     try {
-      await PasswordRecoveryService.sendRecoveryEmail(widget.email);
+      await PasswordRecoveryService.sendRecoveryEmail(
+        widget.email,
+        previousCode: previousCode,
+      );
       if (mounted) {
         setState(() {
           _info = 'A new code has been sent.';
         });
+        _startCooldown();
       }
     } catch (error) {
       if (mounted) {
-        setState(() =>
-            _error = error.toString().replaceFirst('StateError: ', '').replaceFirst('Exception: ', ''));
+        setState(
+            () => _error = PasswordRecoveryService.formatErrorMessage(error));
       }
     } finally {
       if (mounted) setState(() => _resending = false);
@@ -271,17 +303,22 @@ class _PasswordRecoveryVerificationScreenState
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Enter the verification code sent to .',
+                        'Enter the verification code sent to ${widget.email}.',
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _codeController,
                         keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                        maxLength: 6,
                         autofocus: true,
-                        enabled: !_verifying,
+                        enabled: !_verifying && !_resending,
                         decoration: const InputDecoration(
                           labelText: 'Verification Code',
                           prefixIcon: Icon(Icons.numbers),
+                          counterText: '',
                         ),
                         onSubmitted: (_) => _verify(),
                       ),
@@ -305,7 +342,7 @@ class _PasswordRecoveryVerificationScreenState
                       ],
                       const SizedBox(height: 24),
                       FilledButton(
-                        onPressed: _verifying ? null : _verify,
+                        onPressed: _verifying || _resending ? null : _verify,
                         child: _verifying
                             ? const SizedBox(
                                 height: 18,
@@ -317,7 +354,9 @@ class _PasswordRecoveryVerificationScreenState
                       ),
                       const SizedBox(height: 8),
                       TextButton(
-                        onPressed: _resending || _verifying ? null : _resend,
+                        onPressed: _resending || _verifying || _cooldown > 0
+                            ? null
+                            : _resend,
                         child: _resending
                             ? const SizedBox(
                                 height: 18,
@@ -325,7 +364,9 @@ class _PasswordRecoveryVerificationScreenState
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text('Resend Code'),
+                            : Text(_cooldown > 0
+                                ? 'Resend in ${_cooldown}s'
+                                : 'Resend Code'),
                       ),
                     ],
                   ),
@@ -365,6 +406,11 @@ class _PasswordRecoveryNewPasswordScreenState
 
   Future<void> _save() async {
     if (_saving) return;
+    if (_password.text.length < 6) {
+      setState(
+          () => _error = 'Use at least 6 characters for your new password.');
+      return;
+    }
     if (_password.text != _confirmPassword.text) {
       setState(() => _error = 'Passwords do not match.');
       return;
@@ -378,8 +424,8 @@ class _PasswordRecoveryNewPasswordScreenState
       if (mounted) setState(() => _complete = true);
     } catch (error) {
       if (mounted) {
-        setState(() =>
-            _error = error.toString().replaceFirst('StateError: ', '').replaceFirst('Exception: ', ''));
+        setState(
+            () => _error = PasswordRecoveryService.formatErrorMessage(error));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -388,7 +434,8 @@ class _PasswordRecoveryNewPasswordScreenState
 
   @override
   Widget build(BuildContext context) {
-    final hasSession = PasswordRecoveryService.hasRecoverySession;
+    final hasSession =
+        _complete || _saving || PasswordRecoveryService.hasRecoverySession;
     return Scaffold(
       appBar: AppBar(
         title: const Text('New Password'),
@@ -424,7 +471,8 @@ class _PasswordRecoveryNewPasswordScreenState
                             FilledButton(
                               onPressed: () {
                                 // Pop all the way back to login
-                                Navigator.popUntil(context, (route) => route.isFirst);
+                                Navigator.popUntil(
+                                    context, (route) => route.isFirst);
                               },
                               child: const Text('Return to sign in'),
                             ),
@@ -491,7 +539,8 @@ class _PasswordRecoveryNewPasswordScreenState
                                   : const Text('Update Password'),
                             ),
                             TextButton(
-                              onPressed: _saving ? null : () => Navigator.pop(context),
+                              onPressed:
+                                  _saving ? null : () => Navigator.pop(context),
                               child: const Text('Back'),
                             ),
                           ],

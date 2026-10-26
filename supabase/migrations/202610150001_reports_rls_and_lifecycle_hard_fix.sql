@@ -5,12 +5,23 @@
 --      from the Admin Portal were rejected unless reporter_id = auth.uid() and
 --      status = 'pending'.
 --   2. reporter_id must be nullable so admin-filed reports and preserved
---      reports from deleted accounts remain valid (idempotent re-assertion).
+--      reports from deleted accounts remain valid (idempotent check).
 --
 -- RLS remains ENABLED. Non-admin insert rules are unchanged:
 --   reports_authenticated_create: reporter_id = auth.uid() AND status = 'pending'.
 
-ALTER TABLE public.reports ALTER COLUMN reporter_id DROP NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'reports'
+      AND column_name = 'reporter_id'
+      AND is_nullable = 'NO'
+  ) THEN
+    ALTER TABLE public.reports ALTER COLUMN reporter_id DROP NOT NULL;
+  END IF;
+END $$;
 
 DO $$
 BEGIN
@@ -40,4 +51,3 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.reports;
   END IF;
 END $$;
-

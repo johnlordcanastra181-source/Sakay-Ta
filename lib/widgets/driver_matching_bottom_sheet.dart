@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
 import '../services/driver_matching_service.dart';
+import 'user_avatar.dart';
 
 class DriverMatchingBottomSheet extends StatelessWidget {
   const DriverMatchingBottomSheet({
@@ -93,27 +94,35 @@ class DriverMatchingBottomSheet extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Vehicle Tabs (Tricycle vs Motor)
-                Row(
-                  children: [
-                    _buildVehicleTab(
-                      context,
-                      type: VehicleType.tricycle,
-                      title: 'Tricycle',
-                      subtitle: '3-4 pax',
-                      fare: tricycleFare,
-                      isSelected: selectedVehicle == VehicleType.tricycle,
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildVehicleTab(
+                          context,
+                          type: VehicleType.tricycle,
+                          title: 'Tricycle',
+                          subtitle: '3-4 pax',
+                          fare: tricycleFare,
+                          isSelected: selectedVehicle == VehicleType.tricycle,
+                        ),
+                        const SizedBox(width: 10),
+                        _buildVehicleTab(
+                          context,
+                          type: VehicleType.habal,
+                          title: 'Motor',
+                          subtitle: '1 pax',
+                          fare: habalFare,
+                          isSelected: selectedVehicle == VehicleType.habal,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 10),
-                    _buildVehicleTab(
-                      context,
-                      type: VehicleType.habal,
-                      title: 'Motor',
-                      subtitle: '1 pax',
-                      fare: habalFare,
-                      isSelected: selectedVehicle == VehicleType.habal,
-                    ),
-                  ],
+                  ),
                 ),
+                const SizedBox(width: 8),
 
                 // Radius Pill Button (5km / 10km / 15km)
                 PopupMenuButton<double>(
@@ -167,22 +176,31 @@ class DriverMatchingBottomSheet extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Top Nearest Drivers (${top5Drivers.length})',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textColor(isDark),
+                Expanded(
+                  child: Text(
+                    'Top Nearest Drivers (${top5Drivers.length})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textColor(isDark),
+                    ),
                   ),
                 ),
-                Text(
-                  routeDistanceKm > 0
-                      ? '${routeDistanceKm.toStringAsFixed(1)} km · $routeDurationMins mins'
-                      : '',
-                  style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.subtextColor(isDark),
-                      fontWeight: FontWeight.w500),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    routeDistanceKm > 0
+                        ? '${routeDistanceKm.toStringAsFixed(1)} km · $routeDurationMins mins'
+                        : '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.subtextColor(isDark),
+                        fontWeight: FontWeight.w500),
+                  ),
                 ),
               ],
             ),
@@ -271,49 +289,63 @@ class DriverMatchingBottomSheet extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'ESTIMATED FARE',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.subtextColor(isDark)),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ESTIMATED FARE',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.subtextColor(isDark)),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            currentFare % 1 == 0
+                                ? '₱${currentFare.toInt()}'
+                                : '₱${currentFare.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w900,
+                              color: AppColors.textColor(isDark),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '₱${currentFare.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          color: AppColors.textColor(isDark),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                  SizedBox(
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.terracotta,
-                        foregroundColor: Colors.white,
-                        elevation: 2,
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: SizedBox(
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.terracotta,
+                          foregroundColor: Colors.white,
+                          elevation: 2,
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                      ),
-                      onPressed: top5Drivers.isEmpty ||
-                              selectedDriver?.canSubmitRideRequest != true
-                          ? null
-                          : onConfirmBooking,
-                      child: const Text(
-                        'Confirm & Book Ride',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                        onPressed: top5Drivers.isEmpty ||
+                                selectedDriver?.canSubmitRideRequest != true
+                            ? null
+                            : onConfirmBooking,
+                        child: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Confirm & Book Ride',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -372,7 +404,7 @@ class DriverMatchingBottomSheet extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '₱${fare.toStringAsFixed(0)} · $subtitle',
+                  '${fare % 1 == 0 ? '₱${fare.toInt()}' : '₱${fare.toStringAsFixed(2)}'} · $subtitle',
                   style: TextStyle(
                     fontSize: 11,
                     color: isSelected
@@ -422,32 +454,11 @@ class DriverMatchingBottomSheet extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Driver Avatar / Icon
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: isDark
-                    ? AppColors.gold.withValues(alpha: 0.2)
-                    : const Color(0xFFFFD600),
-                shape: BoxShape.circle,
-              ),
-              child: driver.photoUrl.isNotEmpty
-                  ? ClipOval(
-                      child: Image.network(
-                        driver.photoUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
-                          Icons.person_rounded,
-                          color:
-                              isDark ? AppColors.gold : const Color(0xFF1E1E1E),
-                          size: 26,
-                        ),
-                      ),
-                    )
-                  : Icon(Icons.person_rounded,
-                      color: isDark ? AppColors.gold : const Color(0xFF1E1E1E),
-                      size: 26),
+            // Driver Avatar / Icon with downscaled bitmap decode
+            UserAvatar(
+              photoUrl: driver.photoUrl,
+              name: driver.name,
+              radius: 22,
             ),
             const SizedBox(width: 12),
 

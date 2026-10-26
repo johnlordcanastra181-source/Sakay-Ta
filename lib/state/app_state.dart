@@ -2,7 +2,6 @@ import '../models/fare_matrix.dart';
 import '../services/fare_repository.dart';
 import 'dart:async';
 
-import 'package:async/async.dart' show StreamZip;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
@@ -10,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 
 import '../core/constants.dart';
+import '../core/logger.dart';
 import '../core/philippine_time.dart';
 import '../models/admin_account.dart';
 import '../models/app_user.dart';
@@ -30,6 +30,7 @@ import '../services/supabase/admin_service.dart';
 import '../services/notification_service.dart';
 import '../services/online_payment_gateway.dart';
 import '../services/osm_map_service.dart';
+import '../services/password_change_service.dart';
 import '../services/payment_service.dart';
 import '../services/prefs_service.dart';
 import '../services/sync_service.dart';
@@ -81,8 +82,28 @@ bool isIncomingRideVisibleToDriver({
   return true;
 }
 
+@visibleForTesting
+bool isTransientNetworkError(Object error) {
+  if (error is AuthException || error is StateError) return false;
+  final raw = error.toString();
+  return raw.contains('SocketException') ||
+      raw.contains('TimeoutException') ||
+      raw.contains('ClientException') ||
+      raw.contains('Failed host lookup') ||
+      raw.contains('Connection closed') ||
+      raw.contains('Connection refused') ||
+      raw.contains('Connection reset') ||
+      raw.contains('HandshakeException') ||
+      raw.contains('Network is unreachable') ||
+      raw.contains('Software caused connection abort') ||
+      raw.contains('XMLHttpRequest error') ||
+      raw.contains('FetchException');
+}
+
 class AppState extends ChangeNotifier {
   AppState._();
+  @visibleForTesting
+  AppState.forTesting();
   static AppState? _instance;
 
   factory AppState() => instance;
@@ -126,11 +147,11 @@ class AppState extends ChangeNotifier {
         orElse: () => FareMatrix(
               id: 'default',
               vehicleType: type,
-              baseFare: type == VehicleType.tricycle ? 15.0 : 20.0,
-              includedBaseDistance: 1.0,
-              perKmRate: type == VehicleType.tricycle ? 5.0 : 8.0,
+              baseFare: type == VehicleType.tricycle ? 10.0 : 20.0,
+              includedBaseDistance: type == VehicleType.tricycle ? 2.0 : 0.0,
+              perKmRate: 5.0,
               perMinuteRate: 0.0,
-              minimumFare: type == VehicleType.tricycle ? 15.0 : 20.0,
+              minimumFare: type == VehicleType.tricycle ? 10.0 : 20.0,
               bookingFee: 0.0,
               surgeMultiplier: 1.0,
               commissionPercent: 0.0,
@@ -187,23 +208,58 @@ class AppState extends ChangeNotifier {
   bool _completingActiveTrip = false;
 
   final Set<String> _declinedTripIds = {};
+  final Set<String> _promptedRatingTripIds = {};
+  Trip? pendingRatingTrip;
   final Map<String, List<Trip>> _stableIncomingTripsByDriver = {};
   DateTime? _onlineStartedAt;
   Timer? _onlineHeartbeatTimer;
+  int _locationUpdateGeneration = 0;
   double _todayOnlineHours = 0;
   bool _hasServerTodayOnlineHours = false;
   final Map<String, String> _locationAddressCache = {};
+  final Map<String,
+          ({String name, String plate, String? photoUrl, int avatarColor})>
+      _driverDisplayCache = {};
+  String? _cachedRideHistoryUserId;
+  List<RideEntry>? _cachedRideHistory;
+  final Map<String, RideEntry> _rideEntryByIdCache = {};
+  String? _cachedWalletDriverId;
+  List<WalletEntry>? _cachedWalletEntries;
 
   String? lastError;
 
   String get roleLabel => currentUser?.role ?? UserRole.passenger;
 
+  bool shouldPromptRatingFor(String tripId) =>
+      tripId.isNotEmpty && !_promptedRatingTripIds.contains(tripId);
+
+  void markRatingPrompted(String tripId) {
+    if (tripId.isEmpty) return;
+    _promptedRatingTripIds.add(tripId);
+    if (pendingRatingTrip?.id == tripId) {
+      pendingRatingTrip = null;
+      notifyListeners();
+    }
+  }
+
+  void clearPendingRatingTrip([String? tripId]) {
+    if (tripId == null || pendingRatingTrip?.id == tripId) {
+      if (pendingRatingTrip != null) {
+        _promptedRatingTripIds.add(pendingRatingTrip!.id);
+        pendingRatingTrip = null;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Non-credential system root identifier used only for role/UI visibility checks.
+  /// Never stores a hardcoded password or personal email.
   static final AdminAccount defaultSuperAdmin = AdminAccount(
     id: 'super-admin-root',
-    fullName: 'John Lord Canastra',
-    email: 'johnlordcanastra@sakayta.app',
-    mobile: '09000000000',
-    passwordHash: DatabaseService.hashPassword('admin09876'),
+    fullName: 'System Root Administrator',
+    email: '',
+    mobile: '',
+    passwordHash: '',
     role: 'super_admin',
     status: AccountStatus.active,
     permissions: AdminPermissions.all,
@@ -211,6 +267,24 @@ class AppState extends ChangeNotifier {
     createdAt: DateTime(2024, 1, 1),
     updatedAt: DateTime(2024, 1, 1),
   );
+
+  @override
+  void dispose() {
+    _locationUpdateGeneration++;
+    _positionSub?.cancel();
+    _positionSub = null;
+    _fareMatrixSub?.cancel();
+    _fareMatrixSub = null;
+    _userSub?.cancel();
+    _userSub = null;
+    _activeTripSub?.cancel();
+    _activeTripSub = null;
+    _driverRatingsSub?.cancel();
+    _driverRatingsSub = null;
+    _onlineHeartbeatTimer?.cancel();
+    _onlineHeartbeatTimer = null;
+    super.dispose();
+  }
 
   final List<AdminAccount> _inMemoryAdmins = [];
   List<AdminAccount> get adminAccounts => List.unmodifiable(_inMemoryAdmins);
@@ -279,7 +353,9 @@ class AppState extends ChangeNotifier {
           notifyListeners();
         });
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
   }
 
   Future<void> init() async {
@@ -344,7 +420,9 @@ class AppState extends ChangeNotifier {
         pendingDriverApplicationStatusToken = driverReceipt.statusToken;
         pendingDriverApplicationEmail = driverReceipt.email;
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     isOnline = connectivity.isOnline;
 
     unawaited(_loadAdminsFromStorage());
@@ -354,7 +432,9 @@ class AppState extends ChangeNotifier {
       isOnline = quality != ConnectionQuality.offline;
       try {
         pendingSyncCount = await sync.pendingCount();
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
       notifyListeners();
       if (isOnline && pendingSyncCount > 0) {
         await flushSyncQueue();
@@ -365,7 +445,9 @@ class AppState extends ChangeNotifier {
       isOnline = online;
       try {
         pendingSyncCount = await sync.pendingCount();
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
       notifyListeners();
       if (online && pendingSyncCount > 0) {
         await flushSyncQueue();
@@ -386,13 +468,17 @@ class AppState extends ChangeNotifier {
           try {
             await _loadUserData(restored.id)
                 .timeout(const Duration(seconds: 1), onTimeout: () {});
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
           if (currentUser != null && currentUser!.isDeactivated) {
             await logout();
           }
         }
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
 
     initializing = false;
     notifyListeners();
@@ -459,7 +545,9 @@ class AppState extends ChangeNotifier {
       } else if (driverProfile != null) {
         notifyListeners();
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
 
     // Load feed data concurrently.
     try {
@@ -469,7 +557,9 @@ class AppState extends ChangeNotifier {
         if (currentUser?.isDriver == true) refreshTransactions(),
       ]);
       notifyListeners();
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
 
     if (currentUser != null) {
       _attachRealtimeListeners(currentUser!);
@@ -508,7 +598,28 @@ class AppState extends ChangeNotifier {
 
     _activeTripSub = tripStream.listen((trip) {
       if (currentUser?.id == (user as dynamic).id) {
+        final previousTrip = activeTrip;
         activeTrip = trip;
+        if (!user.isDriver) {
+          if (trip != null &&
+              RideStatus.normalize(trip.status) == RideStatus.completed &&
+              trip.rating == null &&
+              shouldPromptRatingFor(trip.id)) {
+            pendingRatingTrip = trip;
+          } else if (trip == null && previousTrip != null) {
+            final prevId = previousTrip.id;
+            unawaited(trips.getById(prevId).then((latest) {
+              if (latest != null &&
+                  currentUser?.id == user.id &&
+                  RideStatus.normalize(latest.status) == RideStatus.completed &&
+                  latest.rating == null &&
+                  shouldPromptRatingFor(latest.id)) {
+                pendingRatingTrip = latest;
+                notifyListeners();
+              }
+            }).catchError((Object _) {}));
+          }
+        }
         notifyListeners();
       }
     }, onError: (Object error) {
@@ -555,7 +666,9 @@ class AppState extends ChangeNotifier {
     try {
       final user = await auth.getUser(id);
       if (user != null) currentUser = user;
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     if (currentUser?.isDriver == true && SupabaseService.isConfigured) {
       await refreshTodayDrivingHours();
     }
@@ -571,7 +684,9 @@ class AppState extends ChangeNotifier {
       } else {
         activeTrip = await trips.activeTripForPassenger((user as dynamic).id);
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     notifyListeners();
   }
 
@@ -580,7 +695,9 @@ class AppState extends ChangeNotifier {
     if (user == null || !user.isDriver) return;
     try {
       transactions = await earnings.transactionsFor((user as dynamic).id);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     notifyListeners();
   }
 
@@ -591,7 +708,9 @@ class AppState extends ChangeNotifier {
       notificationList = await notifications.listFor((user as dynamic).id);
       unreadNotifications =
           await notifications.unreadCount((user as dynamic).id);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     notifyListeners();
   }
 
@@ -632,6 +751,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  @Deprecated('Driver registered vehicle details are locked and read-only.')
   Future<void> updateDriverVehicleInfo({
     required String plateNumber,
     required String make,
@@ -640,19 +760,9 @@ class AppState extends ChangeNotifier {
     String? todaName,
     VehicleType? vehicleType,
   }) async {
-    final current = driverProfile;
-    if (current == null) return;
-    final updated = current.copyWith(
-      plateNumber: plateNumber,
-      make: make,
-      model: model,
-      color: color,
-      todaName: todaName ?? current.todaName,
-      vehicleType: vehicleType ?? current.vehicleType,
+    throw UnsupportedError(
+      'Registered vehicle details cannot be modified after registration.',
     );
-    driverProfile = updated;
-    await auth.updateDriverProfile(updated);
-    notifyListeners();
   }
 
   Future<void> updateDriverDocProfile(String? photoUrl) async {
@@ -670,7 +780,9 @@ class AppState extends ChangeNotifier {
     try {
       final profile = await auth.getDriverProfile(id);
       if (profile != null) driverProfile = profile;
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     notifyListeners();
   }
 
@@ -715,17 +827,42 @@ class AppState extends ChangeNotifier {
     }
     _stopLocationUpdates();
     _detachRealtimeListeners();
+    _fareMatrixSub?.cancel();
+    _fareMatrixSub = null;
     await auth.logout();
     currentUser = null;
     driverProfile = null;
+    pendingDriverApplicationId = null;
+    pendingDriverApplicationEmail = null;
+    pendingDriverApplicationStatus = 'pending';
+    pendingDriverApplicationRejectionReason = null;
+    pendingDriverApplicationStatusError = null;
     activeTrip = null;
+    pendingRatingTrip = null;
+    _promptedRatingTripIds.clear();
     transactions = [];
     _onlineStartedAt = null;
     _todayOnlineHours = 0;
     _hasServerTodayOnlineHours = false;
+    _lastLatitude = null;
+    _lastLongitude = null;
+    _lastLocationWriteAt = null;
+    _requestingRide = false;
+    _startingActiveTrip = false;
+    _completingActiveTrip = false;
+    _declinedTripIds.clear();
+    _stableIncomingTripsByDriver.clear();
+    _locationAddressCache.clear();
     chatMessages = [];
     notificationList = [];
     unreadNotifications = 0;
+    _driverDisplayCache.clear();
+    _cachedRideHistoryUserId = null;
+    _cachedRideHistory = null;
+    _rideEntryByIdCache.clear();
+    _cachedWalletDriverId = null;
+    _cachedWalletEntries = null;
+    lastError = null;
     notifyListeners();
   }
 
@@ -733,6 +870,10 @@ class AppState extends ChangeNotifier {
   Future<String> clearCache() async {
     PaintingBinding.instance.imageCache.clear();
     PaintingBinding.instance.imageCache.clearLiveImages();
+    _driverDisplayCache.clear();
+    _cachedRideHistory = null;
+    _rideEntryByIdCache.clear();
+    _cachedWalletEntries = null;
     notifyListeners();
     return '12.4 MB';
   }
@@ -754,6 +895,8 @@ class AppState extends ChangeNotifier {
     currentUser = null;
     driverProfile = null;
     activeTrip = null;
+    pendingRatingTrip = null;
+    _promptedRatingTripIds.clear();
     transactions = [];
     chatMessages = [];
     notificationList = [];
@@ -873,10 +1016,15 @@ class AppState extends ChangeNotifier {
 
   Future<void> _startLocationUpdates() async {
     _stopLocationUpdates();
+    final generation = ++_locationUpdateGeneration;
     try {
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
+      }
+      if (generation != _locationUpdateGeneration ||
+          currentUser?.isDriver != true) {
+        return;
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -891,6 +1039,10 @@ class AppState extends ChangeNotifier {
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 10),
         );
+        if (generation != _locationUpdateGeneration ||
+            currentUser?.isDriver != true) {
+          return;
+        }
         await updateDriverLocation(
           latitude: position.latitude,
           longitude: position.longitude,
@@ -899,13 +1051,20 @@ class AppState extends ChangeNotifier {
         debugPrint('SakayTa: initial location fix unavailable ($e)');
       }
 
+      if (generation != _locationUpdateGeneration ||
+          currentUser?.isDriver != true) {
+        return;
+      }
+
       // Then stream fixes while the driver stays online.
+      _positionSub?.cancel();
       _positionSub = Geolocator.getPositionStream(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 25,
         ),
       ).listen((position) {
+        if (generation != _locationUpdateGeneration) return;
         updateDriverLocation(
           latitude: position.latitude,
           longitude: position.longitude,
@@ -940,6 +1099,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _stopLocationUpdates() {
+    _locationUpdateGeneration++;
     _positionSub?.cancel();
     _positionSub = null;
     _onlineHeartbeatTimer?.cancel();
@@ -976,11 +1136,17 @@ class AppState extends ChangeNotifier {
       latitude: latitude,
       longitude: longitude,
     );
-    await SupabaseService.instance.saveDriverLocation(
-      userId: (user as dynamic).id,
-      latitude: latitude,
-      longitude: longitude,
-    );
+    if (isOnline && SupabaseService.isConfigured) {
+      try {
+        await SupabaseService.instance.saveDriverLocation(
+          userId: (user as dynamic).id,
+          latitude: latitude,
+          longitude: longitude,
+        );
+      } catch (e) {
+        debugPrint('AppState updateDriverLocation cloud note: $e');
+      }
+    }
     if (currentUser != null) {
       currentUser = currentUser!.copyWith(
         latitude: latitude,
@@ -1100,28 +1266,23 @@ class AppState extends ChangeNotifier {
         () => trips.activeTripForPassenger(passengerId),
       );
     }
-    if (currentUser?.id == passengerId) {
-      return _localNotifyingStream(() async {
-        final trip = activeTrip;
-        return trip?.passengerId == passengerId && trip?.isActive == true
-            ? trip
-            : null;
-      });
-    }
     return Stream<Trip?>.multi((controller) {
       StreamSubscription<Trip?>? cloudSub;
       StreamSubscription<Trip?>? localSub;
       var hasEmittedFromCloud = false;
+      Trip? lastEmittedActiveTrip;
 
       // 1. Immediately emit from in-memory activeTrip or local SQLite (0ms)
       if (activeTrip?.passengerId == passengerId &&
           activeTrip?.isActive == true) {
+        lastEmittedActiveTrip = activeTrip;
         if (!controller.isClosed) controller.add(activeTrip);
       } else {
         trips.activeTripForPassenger(passengerId).then((localTrip) {
           if (!controller.isClosed &&
               !hasEmittedFromCloud &&
               localTrip != null) {
+            lastEmittedActiveTrip = localTrip;
             controller.add(localTrip);
           }
         }).catchError((_) {});
@@ -1134,8 +1295,61 @@ class AppState extends ChangeNotifier {
             .listen(
           (cloudTrip) {
             hasEmittedFromCloud = true;
+            if (cloudTrip != null) {
+              lastEmittedActiveTrip = cloudTrip;
+              if (currentUser?.id == passengerId) {
+                activeTrip = cloudTrip;
+              }
+              if (!controller.isClosed) {
+                controller.add(cloudTrip);
+              }
+              return;
+            }
+            // When active trip query emits null after an active ride was tracked,
+            // check if that ride just transitioned to 'completed' so the passenger
+            // immediately sees the Completed / Rate Driver UI instead of 'No Active Ride'.
+            final prev = lastEmittedActiveTrip ?? activeTrip;
+            if (prev != null && prev.passengerId == passengerId) {
+              final prevId = prev.id;
+              lastEmittedActiveTrip = null;
+              trips.getById(prevId).then((latest) {
+                if (latest != null &&
+                    RideStatus.normalize(latest.status) ==
+                        RideStatus.completed) {
+                  if (currentUser?.id == passengerId &&
+                      latest.rating == null &&
+                      shouldPromptRatingFor(latest.id)) {
+                    pendingRatingTrip = latest;
+                    notifyListeners();
+                  }
+                  if (!controller.isClosed) {
+                    controller.add(latest);
+                  }
+                } else {
+                  if (currentUser?.id == passengerId) {
+                    activeTrip = null;
+                  }
+                  if (!controller.isClosed) {
+                    controller.add(null);
+                  }
+                }
+              }).catchError((_) {
+                if (currentUser?.id == passengerId) {
+                  activeTrip = null;
+                }
+                if (!controller.isClosed) {
+                  controller.add(null);
+                }
+              });
+              return;
+            }
+            if (currentUser?.id == passengerId) {
+              activeTrip = cloudTrip;
+              activeTrip = null;
+            }
             if (!controller.isClosed) {
               controller.add(cloudTrip);
+              controller.add(null);
             }
           },
           onError: (Object error) {
@@ -1418,23 +1632,108 @@ class AppState extends ChangeNotifier {
     });
   }
 
+  List<RideEntry>? getCachedRideHistory({String? status}) {
+    final user = currentUser;
+    if (user == null ||
+        _cachedRideHistory == null ||
+        _cachedRideHistoryUserId != user.id) {
+      return null;
+    }
+    final all = _cachedRideHistory!;
+    if (status == null || status == 'all') return all;
+    return all.where((e) => e.trip.status == status).toList();
+  }
+
+  List<WalletEntry>? getCachedWalletEntries(String driverId) {
+    if (_cachedWalletEntries == null || _cachedWalletDriverId != driverId) {
+      return null;
+    }
+    return _cachedWalletEntries;
+  }
+
+  RideEntry? getCachedRideEntryById(String rideId) {
+    final cached = _rideEntryByIdCache[rideId];
+    if (cached != null) return cached;
+    final history = _cachedRideHistory;
+    if (history != null) {
+      for (final entry in history) {
+        if (entry.trip.id == rideId) {
+          _rideEntryByIdCache[rideId] = entry;
+          return entry;
+        }
+      }
+    }
+    return null;
+  }
+
+  Future<RideEntry?> getOrFetchRideEntryById(String rideId) async {
+    final trimmed = rideId.trim();
+    if (trimmed.isEmpty) return null;
+    final cached = getCachedRideEntryById(trimmed);
+    if (cached != null) {
+      debugPrint('[SakayTa][Perf][Receipt] rideId=$trimmed source=memory_cache '
+          'durationMs=0');
+      return cached;
+    }
+    final sw = Stopwatch()..start();
+    Trip? trip;
+    if (SupabaseService.isConfigured) {
+      try {
+        trip = await SupabaseService.instance.getTrip(trimmed);
+      } catch (e) {
+        debugPrint('[SakayTa][Perf][Receipt] remote getTrip failed: $e');
+      }
+    }
+    trip ??= await trips.getById(trimmed);
+    if (trip == null) return null;
+    final enriched = await _withDriverInfo([trip]);
+    if (enriched.isEmpty) return null;
+    final entry = enriched.first;
+    _rideEntryByIdCache[trimmed] = entry;
+    sw.stop();
+    debugPrint('[SakayTa][Perf][Receipt] rideId=$trimmed source=fetch '
+        'durationMs=${sw.elapsedMilliseconds}');
+    return entry;
+  }
+
   /// Stream of the current user's ride history with driver display info
-  /// (name + plate). Firestore when configured, local otherwise.
+  /// (name + plate). Supabase when configured, local otherwise.
   Stream<List<RideEntry>> rideHistoryStream({String? status}) {
     final user = currentUser;
     if (user == null) return const Stream.empty();
+    final userId = user.id;
     if (SupabaseService.isConfigured) {
-      final tripsStream = user.isDriver
-          ? SupabaseService.instance
-              .streamRideHistoryForDriver((user as dynamic).id)
-          : SupabaseService.instance
-              .streamRideHistoryForPassenger((user as dynamic).id);
-      return tripsStream.asyncMap((trips) async {
-        var filtered = trips;
-        if (status != null && status != 'all') {
-          filtered = trips.where((t) => t.status == status).toList();
+      return Stream<List<RideEntry>>.multi((controller) {
+        final cached = getCachedRideHistory(status: status);
+        if (cached != null) {
+          controller.add(cached);
         }
-        return _withDriverInfo(filtered);
+        final tripsStream = user.isDriver
+            ? SupabaseService.instance.streamRideHistoryForDriver(userId)
+            : SupabaseService.instance.streamRideHistoryForPassenger(userId);
+        final sub = tripsStream.asyncMap((allTrips) async {
+          final allEntries = await _withDriverInfo(allTrips);
+          _cachedRideHistoryUserId = userId;
+          _cachedRideHistory = allEntries;
+          if (status != null && status != 'all') {
+            return allEntries
+                .where((e) => e.trip.status == status)
+                .toList();
+          }
+          return allEntries;
+        }).listen(
+          (entries) {
+            if (!controller.isClosed) {
+              controller.add(entries);
+            }
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            if (!controller.isClosed && getCachedRideHistory(status: status) == null) {
+              controller.addError(error, stackTrace);
+            }
+          },
+        );
+        controller.onCancel = () => sub.cancel();
       });
     }
     return _localNotifyingStream(() => _rideHistoryLocal(status: status));
@@ -1444,50 +1743,113 @@ class AppState extends ChangeNotifier {
     final user = currentUser;
     if (user == null) return const [];
     final historyTrips = user.isDriver
-        ? await trips.tripsForDriver((user as dynamic).id)
-        : await trips.tripsForPassenger((user as dynamic).id);
-    var filtered = historyTrips;
+        ? await trips.tripsForDriver(user.id)
+        : await trips.tripsForPassenger(user.id);
+    final allEntries = await _withDriverInfo(historyTrips);
+    _cachedRideHistoryUserId = user.id;
+    _cachedRideHistory = allEntries;
     if (status != null && status != 'all') {
-      filtered = historyTrips.where((t) => t.status == status).toList();
+      return allEntries.where((e) => e.trip.status == status).toList();
     }
-    return _withDriverInfo(filtered);
+    return allEntries;
   }
 
-  Future<List<RideEntry>> _withDriverInfo(List<Trip> trips) async {
-    final entries = <RideEntry>[];
-    for (final trip in trips) {
-      var name = '';
-      var plate = '';
-      String? photoUrl;
-      var avatarColor = 0;
-      final driverId = trip.driverId;
-      if (driverId != null) {
-        AppUser? driver;
-        DriverProfile? profile;
-        if (SupabaseService.isConfigured) {
-          driver = await SupabaseService.instance.getUser(driverId);
-          profile = await SupabaseService.instance.getDriverProfile(driverId);
-        }
-        driver ??= await auth.getUser(driverId);
-        profile ??= await auth.getDriverProfile(driverId);
-        if (driver != null) {
-          name = driver.fullName;
-          photoUrl = driver.profilePhotoUrl;
-          avatarColor = driver.avatarColor;
-        }
-        if (profile != null) plate = profile.plateNumber;
-        if ((photoUrl == null || photoUrl.trim().isEmpty) && profile != null) {
-          photoUrl = profile.docProfile;
-        }
-      }
-      entries.add(RideEntry(
-        trip: trip,
-        driverName: name,
-        plateNumber: plate,
-        driverPhotoUrl: photoUrl,
-        driverAvatarColor: avatarColor,
-      ));
+  Future<List<RideEntry>> _withDriverInfo(List<Trip> tripsList) async {
+    if (tripsList.isEmpty) return const [];
+    final sw = Stopwatch()..start();
+
+    final self = currentUser;
+    if (self != null && self.isDriver) {
+      final selfPhoto =
+          (self.profilePhotoUrl != null && self.profilePhotoUrl!.trim().isNotEmpty)
+              ? self.profilePhotoUrl
+              : driverProfile?.docProfile;
+      _driverDisplayCache[self.id] = (
+        name: self.fullName,
+        plate: driverProfile?.plateNumber ?? '',
+        photoUrl: selfPhoto,
+        avatarColor: self.avatarColor,
+      );
     }
+
+    final uncachedDriverIds = tripsList
+        .map((t) => t.driverId?.trim() ?? '')
+        .where((id) => id.isNotEmpty && !_driverDisplayCache.containsKey(id))
+        .toSet()
+        .toList();
+
+    if (uncachedDriverIds.isNotEmpty) {
+      if (SupabaseService.isConfigured) {
+        final batch = await SupabaseService.instance
+            .getDriverDisplayInfoBatch(uncachedDriverIds);
+        for (final entry in batch.entries) {
+          _driverDisplayCache[entry.key] = entry.value;
+        }
+        for (final id in uncachedDriverIds) {
+          _driverDisplayCache.putIfAbsent(
+            id,
+            () => (name: '', plate: '', photoUrl: null, avatarColor: 0),
+          );
+        }
+      } else {
+        await Future.wait(uncachedDriverIds.map((driverId) async {
+          var name = '';
+          var plate = '';
+          String? photoUrl;
+          var avatarColor = 0;
+          try {
+            final localUser = await auth.getUser(driverId);
+            final localProfile = await auth.getDriverProfile(driverId);
+            if (localUser != null) {
+              name = localUser.fullName;
+              photoUrl = localUser.profilePhotoUrl;
+              avatarColor = localUser.avatarColor;
+            }
+            if (localProfile != null) {
+              plate = localProfile.plateNumber;
+              if (photoUrl == null || photoUrl.trim().isEmpty) {
+                photoUrl = localProfile.docProfile;
+              }
+            }
+          } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
+          _driverDisplayCache[driverId] = (
+            name: name,
+            plate: plate,
+            photoUrl: photoUrl,
+            avatarColor: avatarColor,
+          );
+        }));
+      }
+    }
+
+    final entries = <RideEntry>[];
+    for (final trip in tripsList) {
+      final driverId = trip.driverId?.trim();
+      final info = (driverId != null && driverId.isNotEmpty)
+          ? _driverDisplayCache[driverId]
+          : null;
+      final isAssignedOrCompleted = (driverId != null && driverId.isNotEmpty) ||
+          trip.status == RideStatus.completed;
+      final resolvedName = (info != null && info.name.isNotEmpty)
+          ? info.name
+          : (isAssignedOrCompleted ? 'Assigned Driver' : '');
+      final entry = RideEntry(
+        trip: trip,
+        driverName: resolvedName,
+        plateNumber: info?.plate ?? '',
+        driverPhotoUrl: info?.photoUrl,
+        driverAvatarColor: info?.avatarColor ?? 0,
+      );
+      _rideEntryByIdCache[trip.id] = entry;
+      entries.add(entry);
+    }
+
+    sw.stop();
+    debugPrint('[SakayTa][Perf][History] _withDriverInfo '
+        'trips=${tripsList.length} uncachedDrivers=${uncachedDriverIds.length} '
+        'durationMs=${sw.elapsedMilliseconds}');
     return entries;
   }
 
@@ -1497,25 +1859,100 @@ class AppState extends ChangeNotifier {
   Stream<List<WalletEntry>> transactionsStream() {
     final user = currentUser;
     if (user == null) return const Stream.empty();
+    final driverId = user.id;
     if (SupabaseService.isConfigured) {
-      return StreamZip([
-        SupabaseService.instance.streamDriverEarnings((user as dynamic).id),
-        SupabaseService.instance.streamWithdrawals((user as dynamic).id),
-      ]).map((results) {
-        final earningRows = (results[0] as List<DriverEarning>)
-            .map(WalletEntry.fromEarning)
-            .toList();
-        final withdrawalRows = (results[1] as List<Withdrawal>)
-            .map(WalletEntry.fromWithdrawal)
-            .toList();
-        final all = <WalletEntry>[...earningRows, ...withdrawalRows]
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        return all;
+      return Stream<List<WalletEntry>>.multi((controller) {
+        final sw = Stopwatch()..start();
+        final cached = getCachedWalletEntries(driverId);
+        if (cached != null) {
+          controller.add(cached);
+        }
+
+        List<DriverEarning>? latestEarnings;
+        List<Withdrawal>? latestWithdrawals;
+        Object? earningsError;
+        StackTrace? earningsStack;
+        var earningsResolved = false;
+        var withdrawalsResolved = false;
+
+        void emitIfReady(String trigger) {
+          if (controller.isClosed) return;
+          if (!earningsResolved || !withdrawalsResolved) return;
+          if (latestEarnings == null &&
+              earningsError != null &&
+              getCachedWalletEntries(driverId) == null) {
+            controller.addError(
+              earningsError!,
+              earningsStack ?? StackTrace.current,
+            );
+            return;
+          }
+          final earningRows = (latestEarnings ?? const <DriverEarning>[])
+              .map(WalletEntry.fromEarning)
+              .toList();
+          final withdrawalRows = (latestWithdrawals ?? const <Withdrawal>[])
+              .map(WalletEntry.fromWithdrawal)
+              .toList();
+          final all = <WalletEntry>[...earningRows, ...withdrawalRows]
+            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          _cachedWalletDriverId = driverId;
+          _cachedWalletEntries = all;
+          if (sw.isRunning) {
+            sw.stop();
+            debugPrint('[SakayTa][Perf][Wallet] initialLoad '
+                'driverId=$driverId entries=${all.length} '
+                'totalMs=${sw.elapsedMilliseconds}');
+          } else {
+            debugPrint('[SakayTa][Perf][Wallet] liveUpdate '
+                'driverId=$driverId trigger=$trigger entries=${all.length}');
+          }
+          controller.add(all);
+        }
+
+        final earningsSub =
+            SupabaseService.instance.streamDriverEarnings(driverId).listen(
+          (rows) {
+            latestEarnings = rows;
+            earningsError = null;
+            earningsResolved = true;
+            emitIfReady('earnings');
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            earningsError = error;
+            earningsStack = stackTrace;
+            earningsResolved = true;
+            emitIfReady('earnings_error');
+          },
+        );
+
+        final withdrawalsSub =
+            SupabaseService.instance.streamWithdrawals(driverId).listen(
+          (rows) {
+            latestWithdrawals = rows;
+            withdrawalsResolved = true;
+            emitIfReady('withdrawals');
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            debugPrint('[SakayTa][Perf][Wallet] withdrawals error '
+                '(non-fatal if earnings succeeded): $error');
+            latestWithdrawals ??= const <Withdrawal>[];
+            withdrawalsResolved = true;
+            emitIfReady('withdrawals_error');
+          },
+        );
+
+        controller.onCancel = () async {
+          await earningsSub.cancel();
+          await withdrawalsSub.cancel();
+        };
       });
     }
     return _localNotifyingStream(() async {
       await refreshTransactions();
-      return transactions.map(WalletEntry.fromTransaction).toList();
+      final list = transactions.map(WalletEntry.fromTransaction).toList();
+      _cachedWalletDriverId = driverId;
+      _cachedWalletEntries = list;
+      return list;
     });
   }
 
@@ -1575,8 +2012,7 @@ class AppState extends ChangeNotifier {
 
         for (int i = 0; i < 7; i++) {
           final dayDate = monday.add(Duration(days: i));
-          final dayStart =
-              DateTime.utc(dayDate.year, dayDate.month, dayDate.day);
+          final dayStart = PhilippineTime.startOfDay(dayDate);
           final dayEnd = dayStart.add(const Duration(days: 1));
 
           final count = driverTrips.where((t) {
@@ -2527,23 +2963,76 @@ class AppState extends ChangeNotifier {
             'New password must be different from your current password.');
       }
       if (user.passwordHash.isNotEmpty) {
-        final currentHash = DatabaseService.hashPassword(currentPassword);
-        if (currentHash != user.passwordHash) {
+        if (!DatabaseService.verifyPassword(
+            currentPassword, user.passwordHash)) {
           throw const FormatException(
               'The current password you entered is incorrect.');
         }
       }
     }
-    if (SupabaseAuthService.isConfigured) {
-      final firebaseUser = Supabase.instance.client.auth.currentUser;
-      if (firebaseUser == null || firebaseUser.id != (user as dynamic).id) {
+    final injectedClient = PasswordChangeService.activeClientOrNull;
+    if (SupabaseAuthService.isConfigured || injectedClient != null) {
+      final client = injectedClient ?? Supabase.instance.client;
+      final authUser = client.auth.currentUser;
+      if (authUser == null || authUser.id != user.id) {
         throw StateError('Sign in again before changing your password.');
       }
-      await Supabase.instance.client.auth
-          .updateUser(UserAttributes(password: password));
+      final email = (user.email ?? authUser.email ?? '').trim().toLowerCase();
+      if (currentPassword != null &&
+          currentPassword.isNotEmpty &&
+          email.isNotEmpty) {
+        try {
+          final verifyRes = await client.auth.signInWithPassword(
+            email: email,
+            password: currentPassword,
+          );
+          if (verifyRes.user == null || verifyRes.user!.id != user.id) {
+            throw const FormatException(
+                'The current password you entered is incorrect.');
+          }
+        } on AuthException catch (e) {
+          final lower = e.message.toLowerCase();
+          if (e.code == 'invalid_credentials' ||
+              e.code == 'invalid-credentials' ||
+              e.code == 'invalid-credential' ||
+              lower.contains('invalid login credentials')) {
+            throw const FormatException(
+                'The current password you entered is incorrect.');
+          }
+          throw PasswordAuthException(
+            PasswordChangeService.formatErrorMessage(e),
+            code: e.code,
+            statusCode: e.statusCode,
+            cause: e,
+          );
+        }
+      }
+      try {
+        await client.auth.updateUser(
+          UserAttributes(
+            password: password,
+            currentPassword: currentPassword,
+          ),
+        );
+      } on AuthException catch (e) {
+        throw PasswordAuthException(
+          PasswordChangeService.formatErrorMessage(e),
+          code: e.code,
+          statusCode: e.statusCode,
+          cause: e,
+        );
+      }
+      final token = client.auth.currentSession?.accessToken;
+      if (token != null) {
+        SupabaseAdminService.instance.cacheAuthorizedAdmin(user.id, token);
+      }
     }
     final hash = DatabaseService.hashPassword(password);
-    await databaseService.updateAdminPassword((user as dynamic).id, hash);
+    try {
+      await databaseService.updateAdminPassword((user as dynamic).id, hash);
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     final idx = _inMemoryAdmins.indexWhere((a) => a.id == (user as dynamic).id);
     if (idx != -1) {
       _inMemoryAdmins[idx] = _inMemoryAdmins[idx].copyWith(passwordHash: hash);
@@ -2615,7 +3104,9 @@ class AppState extends ChangeNotifier {
         _locationAddressCache[key] = firstParts;
         return firstParts;
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     return '${geo.lat.toStringAsFixed(5)}, ${geo.lng.toStringAsFixed(5)}';
   }
 
@@ -2959,7 +3450,9 @@ class AppState extends ChangeNotifier {
         Trip? authoritative;
         try {
           authoritative = await SupabaseService.instance.getTrip(trip.id);
-        } catch (_) {}
+        } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
         _traceDriverRequest(
           event: 'ACCEPT_REFRESH',
           source: 'Database',
@@ -3109,6 +3602,8 @@ class AppState extends ChangeNotifier {
     required VehicleType vehicleType,
     required String paymentMethod,
     required double estimatedFare,
+    double? distanceKm,
+    int? durationMin,
     String? driverId,
   }) async {
     final user = currentUser;
@@ -3149,6 +3644,8 @@ class AppState extends ChangeNotifier {
           paymentMethod: paymentMethod,
           driverId: driverId,
           estimatedFare: estimatedFare,
+          distanceKm: distanceKm,
+          durationMin: durationMin,
         );
         if (activeTrip != null) {
           debugPrint('[SakayTa][Booking] rideId=${activeTrip!.id} '
@@ -3178,6 +3675,8 @@ class AppState extends ChangeNotifier {
           paymentMethod: paymentMethod,
           driverId: driverId,
           estimatedFare: estimatedFare,
+          distanceKm: distanceKm,
+          durationMin: durationMin,
           queued: true,
         );
 
@@ -3224,8 +3723,14 @@ class AppState extends ChangeNotifier {
 
   Future<void> setTripStatus(String tripId, String status) async {
     await trips.setStatus(tripId, status);
-    if (isOnline) {
-      await SupabaseService.instance.updateTrip(tripId, {'status': status});
+    if (isOnline && SupabaseService.isConfigured) {
+      try {
+        await SupabaseService.instance.updateTrip(tripId, {'status': status});
+      } catch (e) {
+        debugPrint('AppState setTripStatus cloud fallback to queue: $e');
+        await sync.queueTripStatus(tripId: tripId, status: status);
+        pendingSyncCount = await sync.pendingCount();
+      }
     } else {
       await sync.queueTripStatus(tripId: tripId, status: status);
       pendingSyncCount = await sync.pendingCount();
@@ -3258,13 +3763,38 @@ class AppState extends ChangeNotifier {
     if (trip.status == RideStatus.arrived) return true;
     if (trip.status != RideStatus.accepted) return false;
     if (isOnline && SupabaseService.isConfigured) {
-      final changed = await SupabaseService.instance.transitionDriverRide(
-        rideId: trip.id,
-        driverId: driver.id,
-        fromStatuses: const {RideStatus.accepted},
-        toStatus: RideStatus.arrived,
-      );
-      if (!changed) return false;
+      try {
+        var changed = await SupabaseService.instance.transitionDriverRide(
+          rideId: trip.id,
+          driverId: driver.id,
+          fromStatuses: const {RideStatus.accepted},
+          toStatus: RideStatus.arrived,
+        );
+        if (!changed) {
+          final remote = await SupabaseService.instance.getTrip(trip.id);
+          if (remote != null &&
+              remote.driverId == driver.id &&
+              const {
+                RideStatus.arrived,
+                RideStatus.started,
+                RideStatus.completed,
+              }.contains(remote.status)) {
+            changed = true;
+          }
+        }
+        if (!changed) return false;
+      } catch (error) {
+        if (!isTransientNetworkError(error)) rethrow;
+        debugPrint('[SakayTa][DriverTrip] rideId=${trip.id} '
+            'arriveAtPickup network fallback to queue: $error');
+        await sync.queueTripStatus(
+          tripId: trip.id,
+          status: RideStatus.arrived,
+          latitude: _lastLatitude,
+          longitude: _lastLongitude,
+        );
+        pendingSyncCount = await sync.pendingCount();
+      }
     } else {
       await sync.queueTripStatus(
         tripId: trip.id,
@@ -3303,16 +3833,40 @@ class AppState extends ChangeNotifier {
           'rendered=DriverHome oldStatus=${trip.status} '
           'requestedStatus=${RideStatus.started}');
       if (isOnline && SupabaseService.isConfigured) {
-        final changed = await SupabaseService.instance.transitionDriverRide(
-          rideId: trip.id,
-          driverId: driver.id,
-          fromStatuses: const {RideStatus.arrived},
-          toStatus: RideStatus.started,
-        );
-        debugPrint('[SakayTa][DriverTrip] rideId=${trip.id} '
-            'updated=${changed ? 1 : 0} returnedStatus='
-            '${changed ? RideStatus.started : trip.status}');
-        if (!changed) return false;
+        try {
+          var changed = await SupabaseService.instance.transitionDriverRide(
+            rideId: trip.id,
+            driverId: driver.id,
+            fromStatuses: const {RideStatus.arrived},
+            toStatus: RideStatus.started,
+          );
+          if (!changed) {
+            final remote = await SupabaseService.instance.getTrip(trip.id);
+            if (remote != null &&
+                remote.driverId == driver.id &&
+                const {
+                  RideStatus.started,
+                  RideStatus.completed,
+                }.contains(remote.status)) {
+              changed = true;
+            }
+          }
+          debugPrint('[SakayTa][DriverTrip] rideId=${trip.id} '
+              'updated=${changed ? 1 : 0} returnedStatus='
+              '${changed ? RideStatus.started : trip.status}');
+          if (!changed) return false;
+        } catch (error) {
+          if (!isTransientNetworkError(error)) rethrow;
+          debugPrint('[SakayTa][DriverTrip] rideId=${trip.id} '
+              'startActiveTrip network fallback to queue: $error');
+          await sync.queueTripStatus(
+            tripId: trip.id,
+            status: RideStatus.started,
+            latitude: _lastLatitude,
+            longitude: _lastLongitude,
+          );
+          pendingSyncCount = await sync.pendingCount();
+        }
       } else {
         await sync.queueTripStatus(
           tripId: trip.id,
@@ -3365,16 +3919,30 @@ class AppState extends ChangeNotifier {
     _completingActiveTrip = true;
     try {
       final usingSupabase = isOnline && SupabaseService.isConfigured;
+      var confirmedOnServer = false;
       debugPrint('[SakayTa][DriverTrip] rideId=${trip.id} '
           'authUid=${driver.id} role=${driver.role} '
           'route=completeTrip oldStatus=${trip.status} '
           'backend=${usingSupabase ? 'supabase' : 'offline_queue'}');
 
       if (usingSupabase) {
-        await SupabaseService.instance.completeTrip(
-          rideId: trip.id,
-          actualFare: trip.fare,
-        );
+        try {
+          await SupabaseService.instance.completeTrip(
+            rideId: trip.id,
+            actualFare: trip.fare,
+          );
+          confirmedOnServer = true;
+        } catch (error) {
+          if (!isTransientNetworkError(error)) rethrow;
+          debugPrint('[SakayTa][DriverTrip] rideId=${trip.id} '
+              'completeTrip network fallback to queue: $error');
+          await sync.queueTripStatus(
+            tripId: trip.id,
+            status: RideStatus.completed,
+            fare: trip.fare,
+          );
+          pendingSyncCount = await sync.pendingCount();
+        }
       } else {
         await sync.queueTripStatus(
           tripId: trip.id,
@@ -3388,7 +3956,7 @@ class AppState extends ChangeNotifier {
       activeTrip = null;
       notifyListeners();
 
-      if (usingSupabase) {
+      if (confirmedOnServer) {
         try {
           await SupabaseService.instance.pushNotification(
             userId: trip.passengerId,
@@ -3422,7 +3990,7 @@ class AppState extends ChangeNotifier {
       await refreshTrips();
       await refreshTransactions();
       await refreshUser();
-      return usingSupabase
+      return confirmedOnServer
           ? TripCompletionResult.confirmed
           : TripCompletionResult.queuedOffline;
     } catch (error, stackTrace) {
@@ -3604,25 +4172,19 @@ class AppState extends ChangeNotifier {
     required String comment,
   }) async {
     final user = currentUser;
-    if (user == null) return;
-    final trip = await trips.getById(tripId);
-    if (user.isDriver ||
-        trip == null ||
-        trip.driverId == null ||
-        trip.status != RideStatus.completed ||
-        trip.rating != null) {
-      return;
-    }
+    if (user == null || user.isDriver) return;
     await _rateTrip(tripId, user, rating, comment);
   }
 
   Future<void> _rateTrip(
       String tripId, AppUser user, int rating, String comment) async {
+    markRatingPrompted(tripId);
     final trip = await trips.getById(tripId);
     if (user.isDriver ||
         trip == null ||
         trip.driverId == null ||
         trip.status != RideStatus.completed ||
+        RideStatus.normalize(trip.status) != RideStatus.completed ||
         trip.rating != null) {
       return;
     }
@@ -3788,7 +4350,9 @@ class AppState extends ChangeNotifier {
     if (currentUser?.isAdmin == true) {
       try {
         await refreshUser();
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     }
     notifyListeners();
   }
@@ -3961,7 +4525,9 @@ class AppState extends ChangeNotifier {
     if (currentUser?.isAdmin == true) {
       try {
         await refreshUser();
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AppState non-fatal note: $e', error: e, stackTrace: s);
+    }
     }
     notifyListeners();
   }
@@ -3994,6 +4560,10 @@ class WalletEntry {
   final String method;
   final DateTime createdAt;
   final String? status;
+  final String? rideId;
+  final double? grossFare;
+  final double? commission;
+  final String? reference;
 
   const WalletEntry({
     required this.id,
@@ -4003,6 +4573,10 @@ class WalletEntry {
     required this.method,
     required this.createdAt,
     this.status,
+    this.rideId,
+    this.grossFare,
+    this.commission,
+    this.reference,
   });
 
   factory WalletEntry.fromTransaction(WalletTransaction t) => WalletEntry(
@@ -4015,6 +4589,8 @@ class WalletEntry {
         method: t.method,
         createdAt: t.createdAt,
         status: 'Completed',
+        rideId: t.tripId,
+        grossFare: t.type == 'income' ? t.amount : null,
       );
 
   factory WalletEntry.fromEarning(DriverEarning e) {
@@ -4034,6 +4610,9 @@ class WalletEntry {
       method: e.paymentMethod,
       createdAt: e.createdAt,
       status: e.settlementStatus,
+      rideId: e.rideId.trim().isNotEmpty ? e.rideId.trim() : null,
+      grossFare: e.fare,
+      commission: e.commission,
     );
   }
 
@@ -4045,6 +4624,7 @@ class WalletEntry {
         method: w.method,
         createdAt: w.createdAt,
         status: w.status,
+        reference: w.reference,
       );
 }
 
@@ -4084,7 +4664,7 @@ List<double> _dailyRevenueSeries(List<(DateTime, double)> entries, int days) {
   final out = <double>[];
   for (var i = days - 1; i >= 0; i--) {
     final localDay = today.subtract(Duration(days: i));
-    final day = DateTime.utc(localDay.year, localDay.month, localDay.day);
+    final day = PhilippineTime.startOfDay(localDay);
     final next = day.add(const Duration(days: 1));
     out.add(entries.where((e) {
       final localDate = PhilippineTime.toPhilippine(e.$1);

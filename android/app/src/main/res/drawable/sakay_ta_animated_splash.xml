@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<animated-vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt">
+
+    <aapt:attr name="android:drawable">
+        <vector
+            android:width="288dp"
+            android:height="288dp"
+            android:viewportWidth="288"
+            android:viewportHeight="288">
+
+            <!-- White background fill so OEM launchers never fall back to ic_launcher -->
+            <path
+                android:fillColor="#FFFFFF"
+                android:pathData="M0,0h288v288H0z" />
+
+            <!-- Pin + Tricycle positioned at the exact center/offset as SakayTaSplashScreen -->
+            <group
+                android:name="pin_bounce_group"
+                android:translateX="88"
+                android:translateY="68.5"
+                android:scaleX="0.9333"
+                android:scaleY="0.9333">
+
+                <!-- Dark Blue Map Pin -->
+                <path
+                    android:fillColor="#172B53"
+                    android:pathData="M14,56a46,46 0 1,0 92,0a46,46 0 1,0 -92,0" />
+                <path
+                    android:fillColor="#172B53"
+                    android:pathData="M44,96L76,96L60,111Z" />
+
+                <!-- Vibrating Yellow Tricycle Body -->
+                <group
+                    android:name="trike_body_group"
+                    android:pivotX="60"
+                    android:pivotY="56">
+                    <path
+                        android:fillColor="#F6C000"
+                        android:pathData="M32,52 C32,37 42,35 62,35 L78,35 C83,35 86,39 88,46 L93,62 L85,62 L81,44 L66,44 L66,64 L85,64 L85,71 L32,71 Z" />
+                    <path
+                        android:fillColor="#172B53"
+                        android:pathData="M40,42 L59,42 L59,56 L38,56 Z" />
+                    <path
+                        android:fillColor="#F6C000"
+                        android:pathData="M72,48 L82,48 L88,68 L80,68 Z" />
+                    <path
+                        android:fillColor="#F6C000"
+                        android:pathData="M82,62 Q92,60 95,68 L82,68 Z" />
+                </group>
+
+                <!-- Rear Wheel (cx=44, cy=72) -->
+                <group
+                    android:name="rear_wheel_group"
+                    android:pivotX="44"
+                    android:pivotY="72">
+                    <path
+                        android:fillColor="#172B53"
+                        android:strokeColor="#F6C000"
+                        android:strokeWidth="5"
+                        android:pathData="M34,72a10,10 0 1,0 20,0a10,10 0 1,0 -20,0" />
+                    <path
+                        android:fillColor="#F6C000"
+                        android:pathData="M41.5,72a2.5,2.5 0 1,0 5,0a2.5,2.5 0 1,0 -5,0" />
+                </group>
+
+                <!-- Front Wheel (cx=84, cy=72) -->
+                <group
+                    android:name="front_wheel_group"
+                    android:pivotX="84"
+                    android:pivotY="72">
+                    <path
+                        android:fillColor="#172B53"
+                        android:strokeColor="#F6C000"
+                        android:strokeWidth="5"
+                        android:pathData="M74,72a10,10 0 1,0 20,0a10,10 0 1,0 -20,0" />
+                    <path
+                        android:fillColor="#F6C000"
+                        android:pathData="M81.5,72a2.5,2.5 0 1,0 5,0a2.5,2.5 0 1,0 -5,0" />
+                </group>
+            </group>
+        </vector>
+    </aapt:attr>
+
+    <!-- Pin Bounce Animation -->
+    <target android:name="pin_bounce_group">
+        <aapt:attr name="android:animation">
+            <objectAnimator
+                android:propertyName="translateY"
+                android:valueFrom="68.5"
+                android:valueTo="62.5"
+                android:duration="600"
+                android:repeatCount="infinite"
+                android:repeatMode="reverse"
+                android:interpolator="@android:interpolator/accelerate_decelerate" />
+        </aapt:attr>
+    </target>
+
+    <!-- Tricycle Engine Vibration -->
+    <target android:name="trike_body_group">
+        <aapt:attr name="android:animation">
+            <set android:ordering="together">
+                <objectAnimator
+                    android:propertyName="translateY"
+                    android:valueFrom="0"
+                    android:valueTo="-1.8"
+                    android:duration="250"
+                    android:repeatCount="infinite"
+                    android:repeatMode="reverse" />
+                <objectAnimator
+                    android:propertyName="rotation"
+                    android:valueFrom="0"
+                    android:valueTo="-0.8"
+                    android:duration="250"
+                    android:repeatCount="infinite"
+                    android:repeatMode="reverse" />
+            </set>
+        </aapt:attr>
+    </target>
+</animated-vector>
+

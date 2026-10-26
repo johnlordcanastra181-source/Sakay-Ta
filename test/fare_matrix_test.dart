@@ -13,30 +13,30 @@ void main() {
     });
 
     test('Defaults are properly configured', () {
-      expect(RideConfig.baseFareFor(VehicleType.tricycle), 15.0);
+      expect(RideConfig.baseFareFor(VehicleType.tricycle), 10.0);
       expect(RideConfig.perKmFor(VehicleType.tricycle), 5.0);
-      expect(VehicleType.tricycle.baseFare, 15.0);
+      expect(VehicleType.tricycle.baseFare, 10.0);
       expect(VehicleType.tricycle.perKm, 5.0);
 
       expect(RideConfig.baseFareFor(VehicleType.habal), 20.0);
-      expect(RideConfig.perKmFor(VehicleType.habal), 8.0);
+      expect(RideConfig.perKmFor(VehicleType.habal), 5.0);
       expect(VehicleType.habal.baseFare, 20.0);
-      expect(VehicleType.habal.perKm, 8.0);
+      expect(VehicleType.habal.perKm, 5.0);
     });
 
-    test('Calculates default fares correctly with rounding to nearest 5', () {
+    test('Calculates default fares correctly with exact distance charges', () {
       final matching = DriverMatchingService.instance;
 
-      // Tricycle: 15 covers the first km, then 1*5 = 20.
+      // Tricycle: 0 + 2*5 = 10 (meets min fare 10)
       expect(
         matching.calculateFare(
           vehicleType: VehicleType.tricycle,
           distanceKm: 2.0,
         ),
-        20.0,
+        10.0,
       );
 
-      // Habal: 20 covers the first km, then 1*8 = 28 -> 30.
+      // Habal: 20 + 2*5 = 30
       expect(
         matching.calculateFare(
           vehicleType: VehicleType.habal,
@@ -46,40 +46,132 @@ void main() {
       );
     });
 
+    test('Distance charge accurately adds to driver fare with decimal distance and rates', () {
+      final tricycleMatrix = FareMatrix(
+        id: 'tricycle',
+        vehicleType: VehicleType.tricycle,
+        baseFare: 15.0,
+        includedBaseDistance: 2.5,
+        perKmRate: 5.5,
+        perMinuteRate: 0,
+        minimumFare: 15.0,
+        bookingFee: 0,
+        surgeMultiplier: 1,
+        commissionPercent: 0,
+        isActive: true,
+        updatedAt: DateTime(2026),
+      );
+
+      // At 2.8 km: chargeable is 2.8 - 2.5 = 0.3 km
+      // Distance charge = 0.3 * 5.5 = 1.65
+      // Total fare = 15.0 + 1.65 = 16.65
+      final fare = FareCalculator.calculateFare(
+        matrix: tricycleMatrix,
+        distanceKm: 2.8,
+        durationMinutes: 0,
+      );
+
+      expect(fare, 16.65);
+      expect(fare, greaterThan(15.0));
+    });
+
     test('Configured matrix values drive DriverMatchingService and RideConfig',
         () {
       final matching = DriverMatchingService.instance;
 
-      expect(RideConfig.baseFareFor(VehicleType.tricycle), 15.0);
+      expect(RideConfig.baseFareFor(VehicleType.tricycle), 10.0);
       expect(RideConfig.perKmFor(VehicleType.tricycle), 5.0);
-      expect(VehicleType.tricycle.baseFare, 15.0);
+      expect(VehicleType.tricycle.baseFare, 10.0);
       expect(VehicleType.tricycle.perKm, 5.0);
 
-      // New calculation: 15 + (3 - 1)*5 = 25.
+      // Calculation: 0 + 3*5 = 15.
       final trikFare = matching.calculateFare(
         vehicleType: VehicleType.tricycle,
         distanceKm: 3.0,
       );
-      expect(trikFare, 25.0);
+      expect(trikFare, 15.0);
 
       expect(RideConfig.baseFareFor(VehicleType.habal), 20.0);
-      expect(RideConfig.perKmFor(VehicleType.habal), 8.0);
+      expect(RideConfig.perKmFor(VehicleType.habal), 5.0);
       expect(VehicleType.habal.baseFare, 20.0);
-      expect(VehicleType.habal.perKm, 8.0);
+      expect(VehicleType.habal.perKm, 5.0);
 
-      // New calculation: 20 + (4 - 1)*8 = 44 -> 45.
+      // Calculation: 20 + 4*5 = 40.
       final habalFare = matching.calculateFare(
         vehicleType: VehicleType.habal,
         distanceKm: 4.0,
       );
-      expect(habalFare, 45.0);
+      expect(habalFare, 40.0);
     });
 
-    test('Fare clamps to base fare if distance is minimal or zero', () {
-      // RideConfig.setFare(VehicleType.tricycle, baseFare: 18.0, perKm: 6.0);
+    test('Fare uses minimum fare if distance is within included base distance', () {
       final fare = RideConfig.fareFor(VehicleType.tricycle, 0.1);
-      // A trip shorter than the included distance still costs the base fare.
-      expect(fare, 15.0);
+      // 0 + 0.1*5 = 0.5 -> minimum fare is 10.0
+      expect(fare, 10.0);
+    });
+
+    test('Minimum fare + Distance charge strictly equals total fare', () {
+      final matrix = FareMatrix(
+        id: 'tricycle',
+        vehicleType: VehicleType.tricycle,
+        baseFare: 12.0,
+        includedBaseDistance: 5.0,
+        perKmRate: 10.0,
+        perMinuteRate: 0,
+        minimumFare: 12.0,
+        bookingFee: 0,
+        surgeMultiplier: 1,
+        commissionPercent: 0,
+        isActive: true,
+        updatedAt: DateTime(2026),
+      );
+
+      // 1.4 km is within 5.0 km: Minimum Fare 12 + Distance Charge 0 = 12.0
+      expect(
+        FareCalculator.calculateFare(
+          matrix: matrix,
+          distanceKm: 1.4,
+          durationMinutes: 0,
+        ),
+        12.0,
+      );
+
+      // 6.0 km exceeds 5.0 km by 1.0 km: 12.0 + (1.0 * 10.0) = 22.0
+      expect(
+        FareCalculator.calculateFare(
+          matrix: matrix,
+          distanceKm: 6.0,
+          durationMinutes: 0,
+        ),
+        22.0,
+      );
+    });
+
+    test('Exact 19.7 km matches between app matching service and matrix calculation', () {
+      final trikMatrix = FareMatrix(
+        id: 'tricycle',
+        vehicleType: VehicleType.tricycle,
+        baseFare: 15.0,
+        includedBaseDistance: 4.0,
+        perKmRate: 10.0,
+        perMinuteRate: 0,
+        minimumFare: 15.0,
+        bookingFee: 0,
+        surgeMultiplier: 1,
+        commissionPercent: 0,
+        isActive: true,
+        updatedAt: DateTime(2026),
+      );
+
+      // 19.7 km - 4.0 km = 15.7 km chargeable
+      // 15.7 km * 10.0 = 157.0
+      // Total fare = 15.0 + 157.0 = 172.0 (Strictly 172, NEVER rounded to 170!)
+      final fare = FareCalculator.calculateFare(
+        matrix: trikMatrix,
+        distanceKm: 19.7,
+        durationMinutes: 26,
+      );
+      expect(fare, 172.0);
     });
 
     test('Driver earnings use the full confirmed fare', () {

@@ -1,10 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
 /// Central debug logger for the Sakay Ta app.
 ///
-/// Use [AppLog] throughout the OTP flow so that the full chain
-/// (button press -> API request -> SMS send -> response) can be traced
-/// in the Flutter console / logcat regardless of where the code runs.
+/// Use [AppLog] and [AppLogger] throughout the app so that diagnostics,
+/// caught exceptions, and API flows can be traced consistently.
 class AppLog {
   AppLog._();
 
@@ -28,4 +28,41 @@ class AppLog {
   static void e(String tag, String message,
           [Object? error, StackTrace? stack]) =>
       _logger.e('[$tag] $message', error: error, stackTrace: stack);
+}
+
+/// Structured application logger used across services and state managers.
+abstract final class AppLogger {
+  static void debug(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    if (kDebugMode) {
+      debugPrint('[SakayTa][DEBUG] $message');
+    }
+  }
+
+  static void info(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    debugPrint('[SakayTa][INFO] $message');
+  }
+
+  static void warn(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    debugPrint('[SakayTa][WARN] $message${error != null ? ' ($error)' : ''}');
+  }
+
+  static void error(
+    String message, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    debugPrint('[SakayTa][ERROR] $message${error != null ? ' ($error)' : ''}');
+  }
 }

@@ -53,37 +53,37 @@ class AppColors {
 
   // Dynamic Theme-Adaptive Color Getters
   static Color canvasColor(bool isDark) =>
-      isDark ? const Color(0xFF0F172A) : const Color(0xFFFAF8F5);
+      isDark ? const Color(0xFF0F172A) : const Color(0xFFF3F5F9);
 
   static Color cardColor(bool isDark) =>
       isDark ? const Color(0xFF1E293B) : Colors.white;
 
   static Color cardElevatedColor(bool isDark) =>
-      isDark ? const Color(0xFF26334D) : const Color(0xFFF8FAFC);
+      isDark ? const Color(0xFF26334D) : const Color(0xFFF7F9FC);
 
   static Color borderColor(bool isDark) =>
       isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
 
   static Color textColor(bool isDark) =>
-      isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+      isDark ? const Color(0xFFF8FAFC) : const Color(0xFF1E293B);
 
   static Color subtextColor(bool isDark) =>
       isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
 
   static Color inputBgColor(bool isDark) =>
-      isDark ? const Color(0xFF1E293B) : Colors.white;
+      isDark ? const Color(0xFF141E2F) : const Color(0xFFEBF0F7);
 
   static Color pillBgColor(bool isDark) =>
-      isDark ? const Color(0xFF334155) : const Color(0xFFEFEFEF);
+      isDark ? const Color(0xFF26334D) : const Color(0xFFE6ECF4);
 
   static Color navBgColor(bool isDark) =>
-      isDark ? const Color(0xFF1E293B) : Colors.white;
+      isDark ? const Color(0xFF162032) : Colors.white;
 
   static Color navBorderColor(bool isDark) =>
-      isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+      isDark ? const Color(0xFF26334D) : const Color(0xFFE2E8F0);
 
   static Color navActiveColor(bool isDark) =>
-      isDark ? const Color(0xFFF59E0B) : const Color(0xFFD97706);
+      isDark ? const Color(0xFFF59E0B) : const Color(0xFFEA580C);
 
   static Color navInactiveColor(bool isDark) =>
       isDark ? const Color(0xFF94A3B8) : const Color(0xFF8E8E93);
@@ -106,10 +106,10 @@ class SakayTheme {
           primary: AppColors.terracotta,
           secondary: AppColors.green,
           surface: Colors.white,
-          onSurface: AppColors.ink,
+          onSurface: const Color(0xFF1E293B),
           outline: const Color(0xFFE2E8F0),
         ),
-        scaffoldBackgroundColor: AppColors.canvas,
+        scaffoldBackgroundColor: const Color(0xFFF3F5F9),
         cardColor: Colors.white,
         fontFamily: 'Roboto',
         appBarTheme: const AppBarTheme(

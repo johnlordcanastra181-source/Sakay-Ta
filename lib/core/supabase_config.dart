@@ -1,10 +1,15 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Public client configuration. The publishable key must be supplied at build
-/// time with `--dart-define=SUPABASE_PUBLISHABLE_KEY=...`.
+/// Public client configuration.
+///
+/// Uses the `--dart-define=SUPABASE_PUBLISHABLE_KEY=...` build parameter when
+/// provided, and falls back to the client-safe `sb_publishable_` key for the
+/// default project so `flutter run` works out-of-the-box in development.
 abstract final class SupabaseConfig {
   static bool _isInitialized = false;
   static const _defaultProjectUrl = 'https://kasgyeaedfbcsrhzcnax.supabase.co';
+  static const _defaultPublishableKey =
+      'sb_publishable_DkWAQ4tOIrC2U4vOra7zaQ_mX313zjR';
 
   static const projectUrl = String.fromEnvironment(
     'SUPABASE_URL',
@@ -13,15 +18,17 @@ abstract final class SupabaseConfig {
 
   static const _envKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 
-  // Hardcoded key for direct IDE running without --dart-define
-  static const _hardcodedKey =
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imthc2d5ZWFlZGZiY3NyaHpjbmF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4ODcyOTksImV4cCI6MjEwNTQ2MzI5OX0._w7ApQ0kB4wQl9zg48dO_ad-u8RaS-IZ4lsLUj3EEvo';
+  static bool get _hasValidEnvKey =>
+      _envKey.isNotEmpty &&
+      _envKey != 'YOUR_SUPABASE_ANON_KEY' &&
+      !_envKey.startsWith('<');
 
-  // A custom URL must never silently retain the default project's key.
-  static String get publishableKey => _envKey.isNotEmpty
+  /// Returns the publishable key passed via `--dart-define`, or the default
+  /// project's client-safe `sb_publishable_` key when targeting `_defaultProjectUrl`.
+  static String get publishableKey => _hasValidEnvKey
       ? _envKey
       : projectUrl == _defaultProjectUrl
-          ? _hardcodedKey
+          ? _defaultPublishableKey
           : '';
 
   static bool get isConfigured =>
@@ -34,8 +41,8 @@ abstract final class SupabaseConfig {
     if (_isInitialized) return;
     if (!isConfigured) {
       throw StateError(
-        'Missing SUPABASE_PUBLISHABLE_KEY. Build with the client-safe '
-        '--dart-define value documented in SUPABASE_MIGRATION.md.',
+        'Missing SUPABASE_PUBLISHABLE_KEY. Build or run with the client-safe '
+        '--dart-define=SUPABASE_PUBLISHABLE_KEY=<your_publishable_key> flag.',
       );
     }
     await Supabase.initialize(

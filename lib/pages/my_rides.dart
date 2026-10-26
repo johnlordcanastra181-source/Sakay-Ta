@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants.dart';
-import '../core/theme.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart' hide Brand, Avatar;
 import '../models/trip.dart';
@@ -13,6 +12,8 @@ import '../widgets/passenger_bottom_nav.dart';
 import '../widgets/submit_report_dialog.dart';
 import '../widgets/ride_details_modal.dart';
 import '../widgets/user_avatar.dart';
+import '../core/neumorphic_theme.dart';
+import '../widgets/neumorphic_widgets.dart';
 
 class MyRides extends StatefulWidget {
   const MyRides({super.key, required this.onNavigate});
@@ -25,6 +26,7 @@ class MyRides extends StatefulWidget {
 class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   String _historyFilter = 'all';
+  int _visibleHistoryCount = 20;
   Stream<Trip?>? _upcomingStream;
   String? _upcomingStreamKey;
   Stream<List<RideEntry>>? _historyStream;
@@ -57,10 +59,10 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
 
   Stream<List<RideEntry>> _stableHistoryStream(AppState app) {
     final user = app.currentUser!;
-    final key = '${user.id}|${user.isDriver}|$_historyFilter';
+    final key = '${user.id}|${user.isDriver}';
     if (_historyStream == null || _historyStreamKey != key) {
       _historyStreamKey = key;
-      _historyStream = app.rideHistoryStream(status: _historyFilter);
+      _historyStream = app.rideHistoryStream();
     }
     return _historyStream!;
   }
@@ -73,14 +75,13 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
         app.darkMode || Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: AppColors.canvasColor(isDark),
+      backgroundColor: NeumorphicColors.canvas(isDark),
       body: SafeArea(
         child: Column(
           children: [
-            // Top Header: Brand (Logo + Sakay Ta) on left, Profile Avatar on right
-            Container(
+            // Top Header: Brand on left, Profile Avatar on right
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              color: AppColors.cardColor(isDark),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -93,11 +94,13 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                           photoUrl: app.currentUser?.profilePhotoUrl,
                           name: app.currentUser?.fullName ?? 'Passenger',
                           avatarColorIndex: app.currentUser?.avatarColor ?? 0,
-                          radius: 18,
+                          radius: 19,
                           border: Border.all(
-                              color:
-                                  isDark ? AppColors.darkBorder : Colors.white,
-                              width: 2),
+                            color: isDark
+                                ? const Color(0xFF2E3D56)
+                                : Colors.white,
+                            width: 2,
+                          ),
                         ),
                         Positioned(
                           bottom: 0,
@@ -106,13 +109,14 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                             width: 10,
                             height: 10,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF059669),
+                              color: const Color(0xFF10B981),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                  color: isDark
-                                      ? AppColors.darkCard
-                                      : Colors.white,
-                                  width: 1.5),
+                                color: isDark
+                                    ? NeumorphicColors.canvas(isDark)
+                                    : Colors.white,
+                                width: 1.5,
+                              ),
                             ),
                           ),
                         ),
@@ -123,22 +127,38 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
               ),
             ),
 
-            // Tab Bar: "Upcoming" & "History" with Golden/Olive Underline
+            // Segmented Neumorphic Tab Bar: "Upcoming" & "History"
             Container(
-              color: AppColors.cardColor(isDark),
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              padding: const EdgeInsets.all(4),
+              decoration: NeumorphicDecorations.inset(
+                isDark: isDark,
+                radius: 24,
+              ),
               child: TabBar(
                 controller: _tabController,
-                indicatorColor: isDark ? AppColors.gold : AppColors.terracotta,
-                indicatorWeight: 3,
-                labelColor: isDark ? AppColors.gold : AppColors.terracotta,
-                unselectedLabelColor: AppColors.subtextColor(isDark),
+                indicator: BoxDecoration(
+                  color: isDark ? const Color(0xFF26334D) : Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: NeumorphicColors.shadowDark(isDark),
+                      offset: const Offset(0, 2),
+                      blurRadius: 4,
+                    ),
+                  ],
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: Colors.transparent,
+                labelColor: NeumorphicColors.brandPrimary,
+                unselectedLabelColor: NeumorphicColors.textSecondary(isDark),
                 labelStyle: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
                 unselectedLabelStyle: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
                 tabs: [
                   Tab(text: l10n.ridesUpcoming),
@@ -146,6 +166,7 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                 ],
               ),
             ),
+            const SizedBox(height: 6),
 
             // Tab Views
             Expanded(
@@ -204,29 +225,26 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Vehicle Outline Icon in muted Gold/Beige
           Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? AppColors.gold.withValues(alpha: 0.15)
-                  : const Color(0xFFFBF4E6),
-              borderRadius: BorderRadius.circular(20),
+            width: 76,
+            height: 76,
+            decoration: NeumorphicDecorations.inset(
+              isDark: isDark,
+              radius: 38,
             ),
-            child: Icon(
+            child: const Icon(
               Icons.directions_car_outlined,
               size: 40,
-              color: isDark ? AppColors.gold : const Color(0xFFC5A059),
+              color: NeumorphicColors.brandPrimary,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
           Text(
             l10n.ridesEmptyUpcoming,
             style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textColor(isDark),
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: NeumorphicColors.textPrimary(isDark),
             ),
             textAlign: TextAlign.center,
           ),
@@ -236,33 +254,15 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 13,
-              color: AppColors.subtextColor(isDark),
-              height: 1.3,
+              color: NeumorphicColors.textSecondary(isDark),
+              height: 1.4,
             ),
           ),
           const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.terracotta,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: () => widget.onNavigate(AppScreen.passengerHome),
-              child: Text(
-                l10n.bookingBookNow,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+          NeumorphicButton(
+            text: l10n.bookingBookNow,
+            icon: Icons.add_location_alt_outlined,
+            onPressed: () => widget.onNavigate(AppScreen.passengerHome),
           ),
         ],
       ),
@@ -273,25 +273,8 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSearching = trip.status == RideStatus.searching;
 
-    return Container(
+    return NeumorphicCard(
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor(isDark),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-        border: Border.all(
-          color: isDark
-              ? AppColors.gold.withValues(alpha: 0.3)
-              : const Color(0xFF6E5600).withValues(alpha: 0.25),
-          width: 1.5,
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -299,39 +282,50 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: isSearching
-                          ? const Color(0xFFF59E0B)
-                          : const Color(0xFF059669),
-                      shape: BoxShape.circle,
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: NeumorphicDecorations.pill(
+                  isDark: isDark,
+                  color: isSearching
+                      ? const Color(0xFFD97706).withValues(alpha: 0.15)
+                      : const Color(0xFF059669).withValues(alpha: 0.15),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: isSearching
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF10B981),
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    isSearching
-                        ? 'LOOKING FOR DRIVER'
-                        : 'ACTIVE RIDE: ${trip.status.toUpperCase()}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      color: isSearching
-                          ? const Color(0xFFD97706)
-                          : const Color(0xFF059669),
+                    const SizedBox(width: 6),
+                    Text(
+                      isSearching
+                          ? 'LOOKING FOR DRIVER'
+                          : 'ACTIVE RIDE: ${trip.status.toUpperCase()}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: isSearching
+                            ? const Color(0xFFD97706)
+                            : const Color(0xFF10B981),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               Text(
                 '₱${trip.fare.toStringAsFixed(2)}',
                 style: TextStyle(
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: FontWeight.w900,
-                  color: AppColors.textColor(isDark),
+                  color: NeumorphicColors.textPrimary(isDark),
                 ),
               ),
             ],
@@ -339,50 +333,58 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
           const SizedBox(height: 14),
 
           // Route Details
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Column(
-                children: [
-                  const Icon(Icons.circle, color: Color(0xFF059669), size: 12),
-                  Container(
-                      width: 2,
-                      height: 26,
-                      color: AppColors.borderColor(isDark)),
-                  const Icon(Icons.location_on,
-                      color: Color(0xFFDC2626), size: 14),
-                ],
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: NeumorphicDecorations.inset(
+              isDark: isDark,
+              radius: 14,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
                   children: [
-                    Text(
-                      trip.pickupAddress,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textColor(isDark)),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      trip.dropoffAddress,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textColor(isDark)),
-                    ),
+                    const Icon(Icons.circle,
+                        color: Color(0xFF10B981), size: 12),
+                    Container(
+                        width: 2,
+                        height: 24,
+                        color: NeumorphicColors.border(isDark)),
+                    const Icon(Icons.location_on,
+                        color: Color(0xFFDC2626), size: 14),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        trip.pickupAddress,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: NeumorphicColors.textPrimary(isDark)),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        trip.dropoffAddress,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: NeumorphicColors.textPrimary(isDark)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
           // Vehicle & Payment badges
           Row(
@@ -391,18 +393,19 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                 trip.vehicleType == VehicleType.tricycle
                     ? 'TRICYCLE'
                     : 'HABAL-HABAL',
-                isDark ? AppColors.gold : const Color(0xFF6E5600),
+                isDark ? const Color(0xFFFBBF24) : const Color(0xFFB45309),
               ),
               const SizedBox(width: 6),
               _badge(
                 trip.paymentMethod.toUpperCase(),
-                const Color(0xFF4F46E5),
+                const Color(0xFF3B82F6),
               ),
               const Spacer(),
               Text(
                 DateFormat('hh:mm a').format(trip.createdAt),
                 style: TextStyle(
-                    fontSize: 11, color: AppColors.subtextColor(isDark)),
+                    fontSize: 11,
+                    color: NeumorphicColors.textSecondary(isDark)),
               ),
             ],
           ),
@@ -412,56 +415,54 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.terracotta,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
+                child: NeumorphicButton(
+                  text: 'Track Ride',
+                  icon: Icons.navigation_rounded,
                   onPressed: () => widget.onNavigate(AppScreen.tracking),
-                  icon: const Icon(Icons.navigation_rounded, size: 18),
-                  label: const Text('Track Ride'),
                 ),
               ),
               const SizedBox(width: 10),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFEF4444),
-                  side: const BorderSide(color: Color(0xFFEF4444)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Cancel Ride?'),
-                      content: const Text(
-                          'Are you sure you want to cancel this booking?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Keep Ride'),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFDC2626),
-                            foregroundColor: Colors.white,
+              SizedBox(
+                width: 110,
+                child: NeumorphicButton(
+                  text: 'Cancel',
+                  isSecondary: true,
+                  accentColor: const Color(0xFFDC2626),
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: NeumorphicColors.card(isDark),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                        title: Text('Cancel Ride?',
+                            style: TextStyle(
+                                color: NeumorphicColors.textPrimary(isDark))),
+                        content: Text(
+                            'Are you sure you want to cancel this booking?',
+                            style: TextStyle(
+                                color: NeumorphicColors.textSecondary(isDark))),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: const Text('Keep Ride'),
                           ),
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Cancel Booking'),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirm == true) {
-                    await app.cancelActiveTrip();
-                  }
-                },
-                child: const Text('Cancel'),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFDC2626),
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: const Text('Cancel Booking'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await app.cancelActiveTrip();
+                    }
+                  },
+                ),
               ),
             ],
           ),
@@ -473,11 +474,14 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
   // --- HISTORY TAB ---
   Widget _buildHistoryTab(AppState app, AppLocalizations l10n) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (app.currentUser == null) {
+      return _buildEmptyUpcoming(l10n);
+    }
     return Column(
       children: [
         // Filter Chips
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           child: Row(
             children: [
               _filterChip(l10n.walletFilterAll, 'all'),
@@ -493,15 +497,59 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
         Expanded(
           child: StreamBuilder<List<RideEntry>>(
             stream: _stableHistoryStream(app),
-            initialData: const [],
+            initialData: app.getCachedRideHistory(),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
+              final hasLoadedData = snapshot.data != null;
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  !hasLoadedData) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final rides = snapshot.data ?? const [];
+              if (snapshot.hasError && !hasLoadedData) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 40,
+                          color: NeumorphicColors.textSecondary(isDark),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Unable to load ride history.',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: NeumorphicColors.textPrimary(isDark),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _historyStream = null;
+                            });
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              final allRides = snapshot.data ?? const <RideEntry>[];
+              final rides = (_historyFilter == 'all')
+                  ? allRides
+                  : allRides
+                      .where((e) => e.trip.status == _historyFilter)
+                      .toList();
 
               if (!(app.currentUser?.isDriver ?? false)) {
-                final prompt = rides.cast<RideEntry?>().firstWhere(
+                final prompt = allRides.cast<RideEntry?>().firstWhere(
                   (entry) {
                     if (entry == null ||
                         entry.trip.status != RideStatus.completed ||
@@ -541,22 +589,31 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.receipt_long_outlined,
-                          size: 48, color: AppColors.subtextColor(isDark)),
-                      const SizedBox(height: 10),
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: NeumorphicDecorations.inset(
+                          isDark: isDark,
+                          radius: 32,
+                        ),
+                        child: Icon(Icons.receipt_long_outlined,
+                            size: 32,
+                            color: NeumorphicColors.textSecondary(isDark)),
+                      ),
+                      const SizedBox(height: 14),
                       Text(
                         l10n.ridesEmptyCompleted,
                         style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textColor(isDark)),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: NeumorphicColors.textPrimary(isDark)),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         l10n.ridesEmptyCompletedSubtitle,
                         style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.subtextColor(isDark)),
+                            fontSize: 13,
+                            color: NeumorphicColors.textSecondary(isDark)),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -564,11 +621,30 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                 );
               }
 
+              final visibleRides = rides.take(_visibleHistoryCount).toList();
+              final hasMore = rides.length > visibleRides.length;
+
               return ListView.separated(
                 padding: const EdgeInsets.all(16),
-                itemCount: rides.length,
+                itemCount: visibleRides.length + (hasMore ? 1 : 0),
                 separatorBuilder: (_, __) => const SizedBox(height: 12),
-                itemBuilder: (_, i) => _buildHistoryCard(rides[i]),
+                itemBuilder: (_, i) {
+                  if (i == visibleRides.length) {
+                    return Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _visibleHistoryCount += 20;
+                          });
+                        },
+                        icon: const Icon(Icons.expand_more_rounded),
+                        label: Text(
+                            'Load More (${rides.length - visibleRides.length} more)'),
+                      ),
+                    );
+                  }
+                  return _buildHistoryCard(visibleRides[i]);
+                },
               );
             },
           ),
@@ -580,23 +656,30 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
   Widget _filterChip(String label, String value) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selected = _historyFilter == value;
-    return ChoiceChip(
-      label: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-          color: selected ? Colors.white : AppColors.textColor(isDark),
+    return GestureDetector(
+      onTap: () => setState(() {
+        _historyFilter = value;
+        _visibleHistoryCount = 20;
+      }),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: NeumorphicDecorations.pill(
+          isDark: isDark,
+          isSelected: selected,
+          activeColor: NeumorphicColors.brandPrimary,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+            color: selected
+                ? Colors.white
+                : NeumorphicColors.textSecondary(isDark),
+          ),
         ),
       ),
-      selected: selected,
-      selectedColor: AppColors.terracotta,
-      backgroundColor:
-          isDark ? AppColors.darkCardElevated : const Color(0xFFF3F4F6),
-      side: BorderSide(
-          color: isDark ? AppColors.borderColor(isDark) : Colors.transparent),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      onSelected: (_) => setState(() => _historyFilter = value),
     );
   }
 
@@ -611,7 +694,8 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
     final dateFormatted = DateFormat('dd/MM/yyyy • hh:mm a')
         .format(trip.completedAt ?? trip.createdAt);
 
-    return InkWell(
+    return NeumorphicCard(
+      padding: const EdgeInsets.all(16),
       onTap: () {
         RideDetailsModal.show(
           context,
@@ -629,183 +713,182 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
               : null,
         );
       },
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.cardColor(isDark),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.borderColor(isDark)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Row: Vehicle Icon + Driver Name + Plate + Fare
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF059669)
-                        .withValues(alpha: isDark ? 0.2 : 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(trip.vehicleType.icon,
-                      color: isDark
-                          ? const Color(0xFF10B981)
-                          : const Color(0xFF059669),
-                      size: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Row: Vehicle Icon + Driver Name + Plate + Fare
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: NeumorphicDecorations.inset(
+                  isDark: isDark,
+                  radius: 21,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        entry.driverName.isEmpty
-                            ? 'Driver assignment pending'
-                            : entry.driverName,
-                        style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textColor(isDark)),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${entry.plateNumber.isEmpty ? "No plate" : entry.plateNumber} • $dateFormatted',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.subtextColor(isDark)),
-                      ),
-                    ],
-                  ),
+                child: Icon(
+                  trip.vehicleType.icon,
+                  color: const Color(0xFF10B981),
+                  size: 20,
                 ),
-                Text(
-                  '₱${trip.fare.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? AppColors.gold : const Color(0xFFD97706),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Route text
-            Text(
-              '${trip.pickupAddress} → ${trip.dropoffAddress}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                color: AppColors.subtextColor(isDark),
-                fontWeight: FontWeight.w500,
               ),
-            ),
-            const SizedBox(height: 12),
-
-            // Badges & Rating
-            Row(
-              children: [
-                _badge(
-                    trip.paymentMethod.toUpperCase(), const Color(0xFF3B82F6)),
-                const SizedBox(width: 6),
-                _badge(
-                  trip.status.toUpperCase(),
-                  isCompleted
-                      ? const Color(0xFF059669)
-                      : const Color(0xFFDC2626),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      entry.driverName.isEmpty
+                          ? 'Driver assignment pending'
+                          : entry.driverName,
+                      style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: NeumorphicColors.textPrimary(isDark)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${entry.plateNumber.isEmpty ? "No plate" : entry.plateNumber} • $dateFormatted',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: NeumorphicColors.textSecondary(isDark)),
+                    ),
+                  ],
                 ),
-                const Spacer(),
-                if (trip.rating != null)
-                  Row(
-                    children: List.generate(
-                      5,
-                      (i) => Icon(
-                        i < trip.rating!
-                            ? Icons.star_rounded
-                            : Icons.star_outline_rounded,
-                        size: 16,
-                        color: const Color(0xFFF59E0B),
-                      ),
+              ),
+              Text(
+                '₱${trip.fare.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w900,
+                  color: NeumorphicColors.brandPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Route text
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: NeumorphicDecorations.inset(
+              isDark: isDark,
+              radius: 10,
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.route_rounded,
+                    size: 16, color: NeumorphicColors.brandPrimary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${trip.pickupAddress} → ${trip.dropoffAddress}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: NeumorphicColors.textSecondary(isDark),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+                ),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
 
-            if (canRate) ...[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => _showRateDialog(
-                    trip.id,
-                    entry.driverName.isEmpty ? 'Driver' : entry.driverName,
-                    driverPhotoUrl: entry.driverPhotoUrl,
-                    driverAvatarColor: entry.driverAvatarColor,
-                    vehicleLabel: trip.vehicleType == VehicleType.habal
-                        ? 'Motorcycle'
-                        : 'Tricycle',
-                  ),
-                  icon: const Icon(Icons.star_outline_rounded,
-                      size: 16, color: Color(0xFFD97706)),
-                  label: const Text(
-                    'Rate this trip',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFD97706)),
+          // Badges & Rating
+          Row(
+            children: [
+              _badge(
+                  trip.paymentMethod.toUpperCase(), const Color(0xFF3B82F6)),
+              const SizedBox(width: 6),
+              _badge(
+                trip.status.toUpperCase(),
+                isCompleted
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFFDC2626),
+              ),
+              const Spacer(),
+              if (trip.rating != null)
+                Row(
+                  children: List.generate(
+                    5,
+                    (i) => Icon(
+                      i < trip.rating!
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      size: 16,
+                      color: const Color(0xFFF59E0B),
+                    ),
                   ),
                 ),
-              ),
             ],
-            if (trip.status == RideStatus.completed ||
-                trip.status == RideStatus.cancelled) ...[
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () {
-                    final viewerIsDriver =
-                        context.read<AppState>().currentUser?.isDriver ??
-                            false;
-                    showSubmitReportDialog(
-                      context,
-                      dialogTitle: 'Report Ride Issue',
-                      rideId: trip.id,
-                      reportedUserId:
-                          viewerIsDriver ? trip.passengerId : trip.driverId,
-                      reportedUserName: viewerIsDriver
-                          ? trip.passengerName
-                          : (entry.driverName.isEmpty
-                              ? null
-                              : entry.driverName),
-                      reportedUserRole:
-                          viewerIsDriver ? 'passenger' : 'driver',
-                    );
-                  },
-                  icon: const Icon(Icons.flag_outlined,
-                      size: 16, color: Color(0xFFDC2626)),
-                  label: const Text(
-                    'Report issue',
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFFDC2626)),
-                  ),
+          ),
+
+          if (canRate) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _showRateDialog(
+                  trip.id,
+                  entry.driverName.isEmpty ? 'Driver' : entry.driverName,
+                  driverPhotoUrl: entry.driverPhotoUrl,
+                  driverAvatarColor: entry.driverAvatarColor,
+                  vehicleLabel: trip.vehicleType == VehicleType.habal
+                      ? 'Motorcycle'
+                      : 'Tricycle',
+                ),
+                icon: const Icon(Icons.star_outline_rounded,
+                    size: 16, color: Color(0xFFD97706)),
+                label: const Text(
+                  'Rate this trip',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFD97706)),
                 ),
               ),
-            ],
+            ),
           ],
-        ),
+          if (trip.status == RideStatus.completed ||
+              trip.status == RideStatus.cancelled) ...[
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () {
+                  final viewerIsDriver =
+                      context.read<AppState>().currentUser?.isDriver ??
+                          false;
+                  showSubmitReportDialog(
+                    context,
+                    dialogTitle: 'Report Ride Issue',
+                    rideId: trip.id,
+                    reportedUserId:
+                        viewerIsDriver ? trip.passengerId : trip.driverId,
+                    reportedUserName: viewerIsDriver
+                        ? trip.passengerName
+                        : (entry.driverName.isEmpty
+                            ? null
+                            : entry.driverName),
+                    reportedUserRole:
+                        viewerIsDriver ? 'passenger' : 'driver',
+                  );
+                },
+                icon: const Icon(Icons.flag_outlined,
+                    size: 16, color: Color(0xFFDC2626)),
+                label: const Text(
+                  'Report issue',
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFDC2626)),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -855,15 +938,15 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
   }
 
   Widget _badge(String label, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: NeumorphicDecorations.pill(
+          isDark: Theme.of(context).brightness == Brightness.dark,
           color: color.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 10.5,
             color: color,
             fontWeight: FontWeight.bold,
           ),

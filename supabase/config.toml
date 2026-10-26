@@ -10,6 +10,16 @@ site_url = "https://sakaytaadmin.vercel.app/"
 [auth.email]
 enable_confirmations = false
 max_frequency = "1m0s"
+otp_length = 6
+otp_expiry = 3600
+
+[auth.email.template.recovery]
+subject = "Sakay Ta — Verification Code: {{ .Token }}"
+content_path = "./supabase/templates/recovery.html"
+
+[auth.email.template.reauthentication]
+subject = "Sakay Ta — Verification Code: {{ .Token }}"
+content_path = "./supabase/templates/reauthentication.html"
 
 [auth.rate_limit]
 email_sent = 30

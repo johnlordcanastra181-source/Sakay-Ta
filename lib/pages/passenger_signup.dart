@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/logger.dart';
+import '../core/neumorphic_theme.dart';
 import '../core/phone_utils.dart';
 import '../core/theme.dart';
 import '../l10n/app_localizations.dart';
@@ -12,6 +13,7 @@ import '../models/philippine_address.dart';
 import '../services/auth_service.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
+import '../widgets/neumorphic_widgets.dart';
 import '../widgets/philippine_address_selector.dart';
 
 class PassengerSignupPage extends StatefulWidget {
@@ -318,11 +320,13 @@ class _PassengerSignupPageState extends State<PassengerSignupPage> {
                     children: [
                       Row(
                         children: [
-                          IconButton(
-                            icon: Icon(Icons.arrow_back_ios_new_rounded,
-                                size: 18, color: AppColors.textColor(isDark)),
-                            onPressed: () => widget.onNavigate(AppScreen.login),
+                          NeumorphicIconButton(
+                            icon: Icons.arrow_back_ios_new_rounded,
+                            size: 40,
+                            iconSize: 18,
+                            onTap: () => widget.onNavigate(AppScreen.login),
                           ),
+                          const SizedBox(width: 8),
                           Brand(dark: isDark),
                         ],
                       ),
@@ -394,30 +398,27 @@ class _PassengerSignupPageState extends State<PassengerSignupPage> {
                   const SizedBox(height: 18),
 
                   // Address Cascade Dropdown (Province -> City -> Barangay)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.cardColor(isDark),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: _addressError
-                            ? AppColors.danger
-                            : (isDark
-                                ? AppColors.darkBorder
-                                : const Color(0xFF998000)),
-                        width: _addressError ? 1.8 : 1.2,
-                      ),
-                    ),
+                  NeumorphicCard(
                     padding: const EdgeInsets.all(16),
+                    radius: 16,
+                    border: _addressError
+                        ? Border.all(color: AppColors.danger, width: 1.8)
+                        : null,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.location_on_rounded,
-                                color: isDark
-                                    ? AppColors.goldVibrant
-                                    : const Color(0xFF6E5600),
-                                size: 20),
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: NeumorphicColors.brandPrimary.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.location_on_rounded,
+                                  color: NeumorphicColors.brandPrimary,
+                                  size: 18),
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               'Address',
@@ -474,6 +475,10 @@ class _PassengerSignupPageState extends State<PassengerSignupPage> {
                     prefixIcon: Icons.lock_outline_rounded,
                     obscure: !_showPassword,
                     suffix: IconButton(
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints(minWidth: 40, minHeight: 40),
+                      splashRadius: 20,
                       icon: Icon(
                         _showPassword
                             ? Icons.visibility_rounded
@@ -494,21 +499,13 @@ class _PassengerSignupPageState extends State<PassengerSignupPage> {
                   const SizedBox(height: 28),
 
                   // Terms & Privacy Policy Card Container
-                  Container(
+                  NeumorphicCard(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 14),
-                    decoration: BoxDecoration(
-                      color:
-                          isDark ? AppColors.darkCard : const Color(0xFFF7F7F7),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _termsError
-                            ? AppColors.danger
-                            : (isDark
-                                ? AppColors.darkBorder
-                                : Colors.transparent),
-                      ),
-                    ),
+                    radius: 14,
+                    border: _termsError
+                        ? Border.all(color: AppColors.danger, width: 1.5)
+                        : null,
                     child: InkWell(
                       onTap: () {
                         setState(() {
@@ -524,9 +521,7 @@ class _PassengerSignupPageState extends State<PassengerSignupPage> {
                             height: 22,
                             child: Checkbox(
                               value: _termsAccepted,
-                              activeColor: isDark
-                                  ? AppColors.goldVibrant
-                                  : const Color(0xFF6E5600),
+                              activeColor: NeumorphicColors.brandPrimary,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(4),
                               ),
@@ -598,47 +593,15 @@ class _PassengerSignupPageState extends State<PassengerSignupPage> {
                   const SizedBox(height: 28),
 
                   // Register Now Button
-                  SizedBox(
+                  NeumorphicButton(
+                    text: 'Create Account',
+                    icon: Icons.email_outlined,
+                    isLoading: _isLoading,
+                    onPressed: () => _submitForm(l10n),
+                    accentColor: isDark
+                        ? AppColors.terracottaVibrant
+                        : const Color(0xFFE65100),
                     height: 52,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isDark
-                            ? AppColors.terracottaVibrant
-                            : const Color(0xFF6E5600),
-                        foregroundColor: Colors.white,
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: _isLoading ? null : () => _submitForm(l10n),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Text(
-                                  'Create Account',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Icon(Icons.email_outlined,
-                                    color: Colors.white, size: 20),
-                              ],
-                            ),
-                    ),
                   ),
 
                   const SizedBox(height: 24),
@@ -697,161 +660,164 @@ class _PassengerSignupPageState extends State<PassengerSignupPage> {
     String? Function(String?)? validator,
     required bool isDark,
   }) {
-    return TextFormField(
-      controller: controller,
-      obscureText: obscure,
-      keyboardType: keyboardType,
-      maxLength: maxLength,
-      inputFormatters: inputFormatters,
-      validator: validator,
-      style: TextStyle(
-          fontSize: 14,
-          color: AppColors.textColor(isDark),
-          fontWeight: FontWeight.w500),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: TextStyle(
-            color: AppColors.textColor(isDark),
-            fontSize: 14,
-            fontWeight: FontWeight.w600),
-        hintText: hint,
-        hintStyle:
-            TextStyle(color: AppColors.subtextColor(isDark), fontSize: 14),
-        helperText: isPhone ? 'Enter the last 10 digits after +63' : null,
-        helperStyle: TextStyle(
-            color: isDark ? AppColors.goldVibrant : const Color(0xFF8A7B4F),
-            fontSize: 11),
-        counterText: '',
-        floatingLabelBehavior: FloatingLabelBehavior.always,
-        prefixIcon: isPhone
-            ? Padding(
-                padding: const EdgeInsets.only(left: 14, right: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '+63',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textColor(isDark)),
-                    ),
-                  ],
-                ),
-              )
-            : (prefixIcon != null
-                ? Icon(prefixIcon,
-                    color: AppColors.subtextColor(isDark), size: 20)
-                : null),
-        suffixIcon: suffix,
-        filled: true,
-        fillColor: AppColors.inputBgColor(isDark),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: isDark ? AppColors.darkBorder : const Color(0xFF998000),
-              width: 1.2),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: NeumorphicColors.textPrimary(isDark),
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: isDark ? AppColors.darkBorder : const Color(0xFF998000),
-              width: 1.2),
+        const SizedBox(height: 6),
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: NeumorphicDecorations.inset(
+            isDark: isDark,
+            radius: 14,
+          ),
+          child: TextFormField(
+            controller: controller,
+            obscureText: obscure,
+            keyboardType: keyboardType,
+            maxLength: maxLength,
+            inputFormatters: inputFormatters,
+            validator: validator,
+            style: TextStyle(
+              fontSize: 14,
+              color: NeumorphicColors.textPrimary(isDark),
+              fontWeight: FontWeight.w500,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: false,
+              fillColor: Colors.transparent,
+              hintText: hint,
+              hintStyle: TextStyle(
+                color: NeumorphicColors.textSecondary(isDark),
+                fontSize: 14,
+              ),
+              helperText: isPhone ? 'Enter the last 10 digits after +63' : null,
+              helperStyle: TextStyle(
+                color: isDark ? AppColors.goldVibrant : const Color(0xFF8A7B4F),
+                fontSize: 11,
+              ),
+              counterText: '',
+              prefixIcon: isPhone
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 14, right: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '+63',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: NeumorphicColors.textPrimary(isDark),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : (prefixIcon != null
+                      ? Icon(prefixIcon,
+                          color: NeumorphicColors.textSecondary(isDark),
+                          size: 20)
+                      : null),
+              prefixIconConstraints:
+                  const BoxConstraints(minWidth: 44, minHeight: 44),
+              suffixIcon: suffix,
+              suffixIconConstraints:
+                  const BoxConstraints(minWidth: 44, minHeight: 44),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+              disabledBorder: InputBorder.none,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            ),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(
-              color: isDark ? AppColors.goldVibrant : const Color(0xFF6E5600),
-              width: 2),
-        ),
-      ),
+      ],
     );
   }
 
   Widget _buildLanguageDropdown(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor(isDark),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: isDark ? AppColors.darkBorder : const Color(0xFF998000),
-            width: 1.2),
-      ),
-      child: Stack(
+    return NeumorphicCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      radius: 14,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            left: 0,
-            top: 4,
-            child: Text(
-              'Preferred Language',
-              style: TextStyle(
-                  fontSize: 10,
-                  color: AppColors.subtextColor(isDark),
-                  fontWeight: FontWeight.bold),
+          Text(
+            'Preferred Language',
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.subtextColor(isDark),
+              fontWeight: FontWeight.w700,
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(top: 14),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedLanguage,
-                isExpanded: true,
-                dropdownColor:
-                    isDark ? AppColors.darkCardElevated : Colors.white,
-                icon: Icon(Icons.arrow_drop_down,
-                    color: AppColors.subtextColor(isDark)),
-                items: [
-                  DropdownMenuItem(
-                    value: 'en',
-                    child: Row(
-                      children: [
-                        Icon(Icons.language_rounded,
-                            size: 18, color: AppColors.subtextColor(isDark)),
-                        const SizedBox(width: 8),
-                        Text('English',
-                            style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.textColor(isDark),
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedLanguage,
+              isExpanded: true,
+              dropdownColor:
+                  isDark ? AppColors.darkCardElevated : Colors.white,
+              icon: Icon(Icons.arrow_drop_down,
+                  color: AppColors.subtextColor(isDark)),
+              items: [
+                DropdownMenuItem(
+                  value: 'en',
+                  child: Row(
+                    children: [
+                      Icon(Icons.language_rounded,
+                          size: 18, color: AppColors.subtextColor(isDark)),
+                      const SizedBox(width: 8),
+                      Text('English',
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textColor(isDark),
+                              fontWeight: FontWeight.w500)),
+                    ],
                   ),
-                  DropdownMenuItem(
-                    value: 'ceb',
-                    child: Row(
-                      children: [
-                        const Text('🇵🇭', style: TextStyle(fontSize: 16)),
-                        const SizedBox(width: 8),
-                        Text('Cebuano',
-                            style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.textColor(isDark),
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
+                ),
+                DropdownMenuItem(
+                  value: 'ceb',
+                  child: Row(
+                    children: [
+                      const Text('🇵🇭', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      Text('Cebuano',
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textColor(isDark),
+                              fontWeight: FontWeight.w500)),
+                    ],
                   ),
-                  DropdownMenuItem(
-                    value: 'tl',
-                    child: Row(
-                      children: [
-                        const Text('🇵🇭', style: TextStyle(fontSize: 16)),
-                        const SizedBox(width: 8),
-                        Text('Tagalog',
-                            style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.textColor(isDark),
-                                fontWeight: FontWeight.w500)),
-                      ],
-                    ),
+                ),
+                DropdownMenuItem(
+                  value: 'tl',
+                  child: Row(
+                    children: [
+                      const Text('🇵🇭', style: TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      Text('Tagalog',
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: AppColors.textColor(isDark),
+                              fontWeight: FontWeight.w500)),
+                    ],
                   ),
-                ],
-                onChanged: (val) {
-                  if (val != null) _changeLanguage(val);
-                },
-              ),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null) _changeLanguage(val);
+              },
             ),
           ),
         ],

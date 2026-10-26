@@ -674,6 +674,10 @@ class SupabaseService {
         lat: lat, lng: lng, radiusKm: radiusKm, vehicleType: vehicleType);
   }
 
+  Future<List<DriverEarning>> fetchDriverEarningsOnce(String driverId) {
+    return _database.fetchDriverEarningsOnce(driverId);
+  }
+
   Stream<List<DriverEarning>> streamDriverEarnings(String driverId) {
     return _database.streamDriverEarnings(driverId);
   }
@@ -683,12 +687,27 @@ class SupabaseService {
     return _database.streamDriverDailyEarningsToday(driverId);
   }
 
-  Stream<List<Trip>> streamRideHistoryForDriver(String driverId) {
-    return _database.streamRideHistoryForDriver(driverId);
+  Stream<List<Trip>> streamRideHistoryForDriver(
+    String driverId, {
+    int limit = 100,
+  }) {
+    return _database.streamRideHistoryForDriver(driverId, limit: limit);
   }
 
-  Stream<List<Trip>> streamRideHistoryForPassenger(String passengerId) {
-    return _database.streamRideHistoryForPassenger(passengerId);
+  Stream<List<Trip>> streamRideHistoryForPassenger(
+    String passengerId, {
+    int limit = 100,
+  }) {
+    return _database.streamRideHistoryForPassenger(passengerId, limit: limit);
+  }
+
+  Future<Map<String, ({String name, String plate, String? photoUrl, int avatarColor})>>
+      getDriverDisplayInfoBatch(Iterable<String> driverIds) {
+    return _database.getDriverDisplayInfoBatch(driverIds);
+  }
+
+  Future<List<Withdrawal>> fetchWithdrawalsOnce(String driverId) {
+    return _database.fetchWithdrawalsOnce(driverId);
   }
 
   Stream<List<Withdrawal>> streamWithdrawals(String driverId) {

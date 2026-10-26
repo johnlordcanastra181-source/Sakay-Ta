@@ -79,8 +79,8 @@ class AdminBackendService {
           final uid = adminData['uid'] as String;
 
           final admin = AdminAccount(
-            id: uid ?? '',
-fullName: cleanName ?? '',
+            id: uid,
+      fullName: cleanName,
 email: cleanEmail,
             mobile: mobile,
             passwordHash: DatabaseService.hashPassword(password),
@@ -115,13 +115,13 @@ email: cleanEmail,
     final uid = await SupabaseAuthService.createAdminAuthAccount(
       email: cleanEmail,
       password: password,
-      fullName: cleanName ?? '',
+            fullName: cleanName,
     );
 
     final now = DateTime.now();
     final admin = AdminAccount(
       id: uid ?? '',
-fullName: cleanName ?? '',
+      fullName: cleanName,
 email: cleanEmail,
       mobile: mobile,
       passwordHash: DatabaseService.hashPassword(

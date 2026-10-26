@@ -1,10 +1,10 @@
 import '../../models/transaction.dart';
-import '../../models/firestore_models.dart';
 
-import '../../models/firestore_models.dart';
+
+
 import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../models/firestore_models.dart';
+
 
 class SupabaseNotificationService {
   SupabaseNotificationService._();

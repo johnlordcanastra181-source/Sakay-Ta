@@ -18,6 +18,51 @@ class AdminFareMatrixView extends StatefulWidget {
 
 class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
   double _simulatorDistanceKm = 5.0;
+  List<Map<String, dynamic>>? _cachedHistory;
+  bool _isLoadingHistory = false;
+  String? _historyError;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHistory();
+  }
+
+  Future<void> _fetchHistory({bool refresh = false}) async {
+    if (_isLoadingHistory) return;
+    if (mounted) {
+      setState(() {
+        _isLoadingHistory = true;
+        _historyError = null;
+      });
+    }
+    try {
+      final res = await Supabase.instance.client
+          .from('fare_matrix_history')
+          .select()
+          .order('changed_at', ascending: false)
+          .limit(50)
+          .timeout(const Duration(seconds: 4));
+      if (mounted) {
+        setState(() {
+          _cachedHistory = List<Map<String, dynamic>>.from(res as List);
+          _isLoadingHistory = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _historyError = e.toString();
+          _isLoadingHistory = false;
+        });
+      }
+    }
+  }
+
+  String _formatCurrency(double val) {
+    if (val % 1 == 0) return 'P${val.toInt()}';
+    return 'P${val.toStringAsFixed(2)}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,12 +135,11 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
             spacing: 24,
             runSpacing: 16,
             children: [
-              _buildMetric('Base Fare', 'P ${matrix.baseFare}'),
+              _buildMetric('Minimum Fare', _formatCurrency(matrix.baseFare)),
               _buildMetric(
                   'Included Distance', '${matrix.includedBaseDistance} km'),
-              _buildMetric('Per Km Rate', 'P ${matrix.perKmRate}/km'),
-              _buildMetric('Minimum Fare', 'P ${matrix.minimumFare}'),
-              _buildMetric('Rounding Rule', 'Nearest P5'),
+              _buildMetric('Per Km Rate', '${_formatCurrency(matrix.perKmRate)}/km'),
+              _buildMetric('Formula', 'Minimum Fare + Distance Charge'),
             ],
           )
         ],
@@ -121,57 +165,119 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
   Widget _buildHistoryPanel() {
     return Container(
       decoration: AdminTheme.cardDecoration(),
-      height: 300,
-      child: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: Supabase.instance.client
-            .from('fare_matrix_history')
-            .stream(primaryKey: ['id'])
-            .order('changed_at', ascending: false)
-            .limit(50),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData)
-            return const Center(child: CircularProgressIndicator());
-          final history = snapshot.data!;
-          if (history.isEmpty)
-            return const Center(
-                child: Text('No history found.',
-                    style: TextStyle(color: AdminTheme.slate)));
-
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: history.length,
-            separatorBuilder: (_, __) =>
-                const Divider(color: AdminTheme.borderLight),
-            itemBuilder: (context, index) {
-              final h = history[index];
-              final date = DateTime.parse(h['changed_at'].toString());
-              return ListTile(
-                dense: true,
-                title: Text('${h['vehicle_type']} updated',
-                    style: const TextStyle(
-                        color: AdminTheme.textPrimary,
-                        fontWeight: FontWeight.bold)),
-                subtitle: Text(
-                    'Changed at ${DateFormat("MMM d, yyyy h:mm a").format(date)}',
-                    style: const TextStyle(color: AdminTheme.slate)),
-                trailing: const Icon(Icons.history_rounded,
-                    color: AdminTheme.slate, size: 16),
-              );
-            },
-          );
-        },
+      height: 320,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _cachedHistory != null
+                      ? '${_cachedHistory!.length} updates recorded'
+                      : 'Audit Log',
+                  style: const TextStyle(color: AdminTheme.slate, fontSize: 13),
+                ),
+                IconButton(
+                  tooltip: 'Refresh History',
+                  icon: _isLoadingHistory
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AdminTheme.terracotta))
+                      : const Icon(Icons.refresh_rounded,
+                          color: AdminTheme.slate, size: 20),
+                  onPressed: _isLoadingHistory
+                      ? null
+                      : () => _fetchHistory(refresh: true),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AdminTheme.borderLight),
+          Expanded(child: _buildHistoryContent()),
+        ],
       ),
+    );
+  }
+
+  Widget _buildHistoryContent() {
+    if (_isLoadingHistory && _cachedHistory == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: AdminTheme.terracotta),
+      );
+    }
+    if (_historyError != null && (_cachedHistory == null || _cachedHistory!.isEmpty)) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.info_outline, color: AdminTheme.slate, size: 28),
+            const SizedBox(height: 8),
+            const Text('Unable to load history or offline',
+                style: TextStyle(color: AdminTheme.slate)),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AdminTheme.bgCard,
+                foregroundColor: AdminTheme.textPrimary,
+              ),
+              onPressed: () => _fetchHistory(refresh: true),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    final history = _cachedHistory ?? const [];
+    if (history.isEmpty) {
+      return const Center(
+        child: Text('No fare matrix history recorded yet.',
+            style: TextStyle(color: AdminTheme.slate)),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.all(16),
+      itemCount: history.length,
+      separatorBuilder: (_, __) =>
+          const Divider(color: AdminTheme.borderLight),
+      itemBuilder: (context, index) {
+        final h = history[index];
+        DateTime? date;
+        try {
+          if (h['changed_at'] != null) {
+            date = DateTime.parse(h['changed_at'].toString());
+          }
+        } catch (_) {}
+        final vType = h['vehicle_type']?.toString().toUpperCase() ?? 'MATRIX';
+        return ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: Text('$vType Fare Updated',
+              style: const TextStyle(
+                  color: AdminTheme.textPrimary,
+                  fontWeight: FontWeight.bold)),
+          subtitle: Text(
+              date != null
+                  ? 'Changed at ${DateFormat("MMM d, yyyy h:mm a").format(date)}'
+                  : 'Recent change',
+              style: const TextStyle(color: AdminTheme.slate)),
+          trailing: const Icon(Icons.history_rounded,
+              color: AdminTheme.slate, size: 16),
+        );
+      },
     );
   }
 
   void _showEditDialog(
       BuildContext context, AppState app, FareMatrix matrix, String name) {
-    final baseCtrl = TextEditingController(text: matrix.baseFare.toString());
+    final minFareCtrl = TextEditingController(text: matrix.baseFare.toString());
     final includedDistanceCtrl =
         TextEditingController(text: matrix.includedBaseDistance.toString());
     final perKmCtrl = TextEditingController(text: matrix.perKmRate.toString());
-    final minFareCtrl =
-        TextEditingController(text: matrix.minimumFare.toString());
     final formKey = GlobalKey<FormState>();
 
     showDialog<void>(
@@ -199,11 +305,10 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold)),
                         const SizedBox(height: 16),
-                        _buildField('Base Fare', baseCtrl),
-                        _buildField('Included Base Distance (km)',
+                        _buildField('Minimum Fare (₱)', minFareCtrl),
+                        _buildField('Included Distance (km)',
                             includedDistanceCtrl),
-                        _buildField('Per Km Rate', perKmCtrl),
-                        _buildField('Minimum Fare', minFareCtrl),
+                        _buildField('Per Km Rate (₱/km)', perKmCtrl),
                       ],
                     ),
                   ),
@@ -222,17 +327,19 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
                       : () async {
                           if (formKey.currentState!.validate()) {
                             setState(() => isSaving = true);
+                            final minFare = double.parse(minFareCtrl.text);
                             final updated = matrix.copyWith(
-                              baseFare: double.parse(baseCtrl.text),
+                              baseFare: minFare,
                               includedBaseDistance:
                                   double.parse(includedDistanceCtrl.text),
                               perKmRate: double.parse(perKmCtrl.text),
-                              minimumFare: double.parse(minFareCtrl.text),
+                              minimumFare: minFare,
                               updatedAt: DateTime.now(),
                             );
                             try {
                               await app.fareMatrixRepo.updateMatrix(updated);
                               app.forceUpdateFareMatrix(updated);
+                              _fetchHistory(refresh: true);
                               if (ctx.mounted) {
                                 Navigator.of(ctx).pop();
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -331,9 +438,9 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
               activeTrackColor: AdminTheme.terracotta,
-              inactiveTrackColor: AdminTheme.slate.withOpacity(0.3),
+              inactiveTrackColor: AdminTheme.slate.withValues(alpha: 0.3),
               thumbColor: AdminTheme.terracotta,
-              overlayColor: AdminTheme.terracotta.withOpacity(0.2),
+              overlayColor: AdminTheme.terracotta.withValues(alpha: 0.2),
             ),
             child: Slider(
               value: _simulatorDistanceKm,
@@ -396,7 +503,8 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
       matrix,
       _simulatorDistanceKm,
     );
-    final distanceCharge = validKm * matrix.perKmRate;
+    final distanceCharge =
+        double.parse((validKm * matrix.perKmRate).toStringAsFixed(2));
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -422,7 +530,7 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
                           fontSize: 14)),
                 ],
               ),
-              Text('P${fare.toInt()}',
+              Text(_formatCurrency(fare),
                   style: const TextStyle(
                       color: AdminTheme.terracotta,
                       fontSize: 18,
@@ -432,12 +540,12 @@ class _AdminFareMatrixViewState extends State<AdminFareMatrixView> {
           const SizedBox(height: 12),
           const Divider(height: 1, color: AdminTheme.borderLight),
           const SizedBox(height: 12),
-          _buildFareRow('Base Fare', 'P${matrix.baseFare.toInt()}'),
+          _buildFareRow('Minimum Fare', _formatCurrency(matrix.baseFare)),
           _buildFareRow(
-            'Distance Charge (${validKm.toStringAsFixed(1)} km x P${matrix.perKmRate.toInt()})',
-            'P${distanceCharge.toStringAsFixed(1)}',
+            'Distance Charge (${validKm.toStringAsFixed(1)} km x ${_formatCurrency(matrix.perKmRate)})',
+            _formatCurrency(distanceCharge),
           ),
-          _buildFareRow('Total Fare', 'P${fare.toInt()}', isGreen: true),
+          _buildFareRow('Total Fare', _formatCurrency(fare), isGreen: true),
         ],
       ),
     );

@@ -55,8 +55,13 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
     // Periodically tick to refresh time-based greetings and stats
     _clockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
-        unawaited(context.read<AppState>().refreshTodayDrivingHours());
-        setState(() {});
+        final app = context.read<AppState>();
+        final prevHours = app.todayDrivingHours;
+        app.refreshTodayDrivingHours().then((_) {
+          if (mounted && app.todayDrivingHours != prevHours) {
+            setState(() {});
+          }
+        });
       }
     });
   }
@@ -258,7 +263,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
     Object? streamError,
     Object? dataError,
   ) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       backgroundColor: AppColors.canvasColor(isDark),
@@ -300,7 +305,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   Widget _buildDashboardDataError(BuildContext context, Object error) {
     debugPrint('[SakayTa][DriverHome] earnings ledger error: $error');
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -343,7 +348,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   // --- Top Navigation Bar with Brand and Driver Photo ---
   Widget _buildTopBar(BuildContext context, AppUser user) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     final driverProfile = context.read<AppState>().driverProfile;
     // Prefer the profile photo set from the in-app Edit Profile flow, falling
@@ -439,7 +444,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   // --- Dynamic Greeting & Real Online Toggle ---
   Widget _buildGreetingAndToggle(BuildContext context, AppUser user) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     final firstName = user.fullName.trim().split(' ').first;
     final greeting = TimeGreeting.getGreeting();
@@ -555,7 +560,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   // --- Today's Earnings Card Matching Reference Design ---
   Widget _buildEarningsCard(double fareAmount, int trips, double hours) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     final formatter = NumberFormat('#,##0.00', 'en_US');
     final formattedTotal = formatter.format(fareAmount);
@@ -605,36 +610,40 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
           const SizedBox(height: 10),
 
           // Big bold Peso Amount: ₱ 1,250.00
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                '₱ ',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textColor(isDark),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  '₱ ',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textColor(isDark),
+                  ),
                 ),
-              ),
-              Text(
-                integerPart,
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.textColor(isDark),
-                  letterSpacing: -0.5,
+                Text(
+                  integerPart,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.textColor(isDark),
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-              Text(
-                '.$decimalPart',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.subtextColor(isDark),
+                Text(
+                  '.$decimalPart',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.subtextColor(isDark),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 18),
 
@@ -730,7 +739,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
     List<IncomingRideRequest> incomingRequests,
     Object? streamError,
   ) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -794,7 +803,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
     BuildContext context,
     IncomingRideRequest request,
   ) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     final trip = request.trip;
     _startCountdownForRequest(trip.id);
@@ -916,7 +925,9 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '₱${trip.fare.toStringAsFixed(0)}',
+                          trip.fare % 1 == 0
+                              ? '₱${trip.fare.toInt()}'
+                              : '₱${trip.fare.toStringAsFixed(2)}',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
@@ -1112,7 +1123,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
     required String dropoffLabel,
     required String dropoffAddress,
   }) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     return IntrinsicHeight(
       child: Row(
@@ -1213,7 +1224,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   // --- Active Trip in Progress Card ---
   Widget _buildActiveTripCard(BuildContext context, Trip trip) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     final app = context.read<AppState>();
     final status = trip.status;
@@ -1359,7 +1370,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Awaiting passenger $providerName payment (₱${trip.fare.toStringAsFixed(0)})',
+                            'Awaiting passenger $providerName payment (${trip.fare % 1 == 0 ? "₱${trip.fare.toInt()}" : "₱${trip.fare.toStringAsFixed(2)}"})',
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
@@ -1625,7 +1636,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   // --- Online Waiting Card ---
   Widget _buildWaitingCard() {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -1679,7 +1690,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   // --- Offline Card ---
   Widget _buildOfflineCard(BuildContext context) {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -1734,7 +1745,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
 
   // --- 4-Tab Bottom Navigation Bar Matching Reference Design ---
   Widget _buildBottomNav() {
-    final isDark = context.watch<AppState>().darkMode ||
+    final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(

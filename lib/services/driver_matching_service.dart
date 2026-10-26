@@ -95,10 +95,11 @@ class NearbyDriver {
       photoUrl: row['profile_photo_path']?.toString() ?? '',
       vehicleType: VehicleTypeX.fromKey(row['vehicle_type']?.toString() ?? ''),
       plateNumber: row['plate_number']?.toString() ?? '',
-      rating: _asDouble(row['rating_average']) ?? 5.0,
+      rating: _asDouble(row['rating_average']) ?? 0.0,
       ratingCount: _asInt(row['rating_count']) ?? 0,
-      completedTrips:
-          0, // Not provided by RPC, but not strictly needed for UI usually
+      completedTrips: _asInt(row['completed_trips']) ??
+          _asInt(row['total_trips']) ??
+          0,
       acceptanceRate: 1.0,
       location: Geo(latitude, longitude),
       distanceKm: distanceKm,
@@ -110,6 +111,44 @@ class NearbyDriver {
           ? _asBool(row['has_live_session'])
           : true,
       locationUpdatedAt: _asDateTime(row['last_location_at']),
+    );
+  }
+
+  NearbyDriver copyWith({
+    String? id,
+    String? name,
+    String? photoUrl,
+    VehicleType? vehicleType,
+    String? plateNumber,
+    double? rating,
+    int? ratingCount,
+    int? completedTrips,
+    double? acceptanceRate,
+    Geo? location,
+    double? distanceKm,
+    int? etaMinutes,
+    bool? isOnline,
+    bool? isAvailable,
+    bool? hasLiveSession,
+    DateTime? locationUpdatedAt,
+  }) {
+    return NearbyDriver(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      photoUrl: photoUrl ?? this.photoUrl,
+      vehicleType: vehicleType ?? this.vehicleType,
+      plateNumber: plateNumber ?? this.plateNumber,
+      rating: rating ?? this.rating,
+      ratingCount: ratingCount ?? this.ratingCount,
+      completedTrips: completedTrips ?? this.completedTrips,
+      acceptanceRate: acceptanceRate ?? this.acceptanceRate,
+      location: location ?? this.location,
+      distanceKm: distanceKm ?? this.distanceKm,
+      etaMinutes: etaMinutes ?? this.etaMinutes,
+      isOnline: isOnline ?? this.isOnline,
+      isAvailable: isAvailable ?? this.isAvailable,
+      hasLiveSession: hasLiveSession ?? this.hasLiveSession,
+      locationUpdatedAt: locationUpdatedAt ?? this.locationUpdatedAt,
     );
   }
 

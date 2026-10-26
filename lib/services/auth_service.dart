@@ -34,8 +34,29 @@ class AuthService {
   AccountRemoteStore get _remote =>
       remoteStore ?? const SupabaseAccountRemoteStore();
 
+  static Future<void> _authQueue = Future.value();
+
+  /// Serializes sensitive authentication and SQLite user cache mutations to
+  /// prevent race conditions when concurrent login/refresh/cache requests fire.
+  static Future<T> _synchronized<T>(Future<T> Function() action) {
+    final completer = Completer<T>();
+    _authQueue = _authQueue.then((_) async {
+      try {
+        final result = await action();
+        completer.complete(result);
+      } catch (e, st) {
+        completer.completeError(e, st);
+      }
+    }).catchError((_) {});
+    return completer.future;
+  }
+
   static String hashPassword(String password) {
     return DatabaseService.hashPassword(password);
+  }
+
+  static bool verifyPassword(String password, String storedHash) {
+    return DatabaseService.verifyPassword(password, storedHash);
   }
 
   static List<String> _mobileVariations(String raw) {
@@ -67,30 +88,53 @@ class AuthService {
       return _loginRemote(cleanIdentifier, password, role);
     }
 
-    try {
-      final admin = await db.getAdminByIdentifier(cleanIdentifier);
-      if (admin != null) {
-        if (admin.passwordHash != hashPassword(password)) {
+    return _synchronized(() async {
+      try {
+        final admin = await db.getAdminByIdentifier(cleanIdentifier);
+        if (admin != null) {
+          if (!DatabaseService.verifyPassword(password, admin.passwordHash)) {
+            return const AuthResult(null, 'wrong_password');
+          }
+          if (admin.isDeactivated) {
+            return const AuthResult(null, 'account_deactivated');
+          }
+          var resolvedAdmin = admin;
+          if (!admin.passwordHash.startsWith(r'$2')) {
+            final upgradedHash = hashPassword(password);
+            await db.updateAdminPassword(admin.id, upgradedHash);
+            resolvedAdmin = admin.copyWith(passwordHash: upgradedHash);
+          }
+          return AuthResult(resolvedAdmin.toUser(), null);
+        }
+        final user = cleanIdentifier.contains('@')
+            ? await _userByEmail(cleanIdentifier)
+            : await _userByMobile(cleanIdentifier);
+        if (user == null) return const AuthResult(null, 'no_user');
+        if (!DatabaseService.verifyPassword(password, user.passwordHash)) {
           return const AuthResult(null, 'wrong_password');
         }
-        if (admin.isDeactivated) {
-          return const AuthResult(null, 'account_deactivated');
+        var resolvedUser = user;
+        if (!user.passwordHash.startsWith(r'$2')) {
+          final upgradedHash = hashPassword(password);
+          final database = await db.database;
+          await database.update(
+            'users',
+            {'password_hash': upgradedHash},
+            where: 'id = ?',
+            whereArgs: [user.id],
+          );
+          resolvedUser = user.copyWith(passwordHash: upgradedHash);
         }
-        return AuthResult(admin.toUser(), null);
+        final error = _accountLoginError(resolvedUser, role);
+        return error == null
+            ? AuthResult(resolvedUser, null)
+            : AuthResult(null, error);
+      } catch (e, s) {
+        AppLogger.debug('AuthService: local login error ($e)',
+            error: e, stackTrace: s);
+        return const AuthResult(null, 'profile_unavailable');
       }
-      final user = cleanIdentifier.contains('@')
-          ? await _userByEmail(cleanIdentifier)
-          : await _userByMobile(cleanIdentifier);
-      if (user == null) return const AuthResult(null, 'no_user');
-      if (user.passwordHash != hashPassword(password)) {
-        return const AuthResult(null, 'wrong_password');
-      }
-      final error = _accountLoginError(user, role);
-      return error == null ? AuthResult(user, null) : AuthResult(null, error);
-    } catch (e) {
-      debugPrint('AuthService: local login error ($e)');
-      return const AuthResult(null, 'profile_unavailable');
-    }
+    });
   }
 
   Future<AuthResult> _loginRemote(
@@ -145,7 +189,9 @@ class AuthService {
                   await SupabaseService.instance.getAdminByMobile(identifier);
               user = a?.toUser();
             }
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
         }
         // Local DB fallback for admin.
         if (user == null) {
@@ -153,7 +199,9 @@ class AuthService {
             final localAdmin = await db.getAdminByIdentifier(identifier) ??
                 await db.getAdminById(uid);
             user = localAdmin?.toUser();
-          } catch (_) {}
+          } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
         }
       } else if (_remote is! SupabaseAccountRemoteStore) {
         // Passenger / driver fast path: check users collection first.
@@ -232,11 +280,15 @@ class AuthService {
             // Persist self-healed user to Firestore so it's permanently stored
             try {
               await _remote.saveUser(user);
-            } catch (_) {}
+            } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
             if (SupabaseService.isConfigured) {
               try {
                 await SupabaseService.instance.saveUser(user);
-              } catch (_) {}
+              } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
             }
 
             // If driver, initialize default driver profile
@@ -248,12 +300,16 @@ class AuthService {
               );
               try {
                 await _remote.saveDriverProfile(defaultDriver);
-              } catch (_) {}
+              } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
               try {
                 final database = await db.database;
                 await database.insert('drivers', defaultDriver.toMap(),
                     conflictAlgorithm: ConflictAlgorithm.replace);
-              } catch (_) {}
+              } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
             } else if (resolvedRole == UserRole.admin) {
               final adminAccount = AdminAccount(
                 id: uid,
@@ -267,11 +323,15 @@ class AuthService {
               );
               try {
                 await db.createAdminAccount(adminAccount);
-              } catch (_) {}
+              } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
               if (SupabaseService.isConfigured) {
                 try {
                   await SupabaseService.instance.saveAdminAccount(adminAccount);
-                } catch (_) {}
+                } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
               }
             }
           }
@@ -303,17 +363,26 @@ class AuthService {
               'status': AccountStatus.approved,
               'verificationStatus': AccountStatus.approved,
               'verification_status': AccountStatus.approved,
+            }).catchError((Object e, StackTrace s) {
+              AppLogger.debug('AuthService: updateUser status note ($e)',
+                  error: e, stackTrace: s);
             }));
             if (resolvedUser.id != uid) {
               unawaited(SupabaseService.instance.updateUser(resolvedUser.id, {
                 'status': AccountStatus.approved,
                 'verificationStatus': AccountStatus.approved,
                 'verification_status': AccountStatus.approved,
+              }).catchError((Object e, StackTrace s) {
+                AppLogger.debug('AuthService: updateUser legacy id note ($e)',
+                    error: e, stackTrace: s);
               }));
             }
-            unawaited(_cacheUser(resolvedUser));
+            await _cacheUser(resolvedUser);
           }
-        } catch (_) {}
+        } catch (e, s) {
+          AppLogger.debug('AuthService: driver status sync note ($e)',
+              error: e, stackTrace: s);
+        }
       }
 
       final error = _accountLoginError(resolvedUser, role);
@@ -332,7 +401,10 @@ class AuthService {
         prefs.saveSession(uid, resolvedUser.role),
       ]);
       if (resolvedUser.isAdmin) {
-        unawaited(_recordAdminLogin(uid));
+        unawaited(_recordAdminLogin(uid).catchError((Object e, StackTrace s) {
+          AppLogger.debug('AuthService: _recordAdminLogin note ($e)',
+              error: e, stackTrace: s);
+        }));
       }
       return AuthResult(resolvedUser, null);
     } on AuthException catch (e) {
@@ -585,7 +657,9 @@ class AuthService {
       try {
         final cloud = await SupabaseService.instance.getUser(cleanId);
         if (cloud != null) return cloud;
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
     }
     try {
       final database = await db.database;
@@ -609,7 +683,9 @@ class AuthService {
       try {
         final cloud = await SupabaseService.instance.getUserByEmail(cleanEmail);
         if (cloud != null) return cloud;
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
     }
     try {
       final database = await db.database;
@@ -634,7 +710,9 @@ class AuthService {
         final cloud =
             await SupabaseService.instance.getUserByMobile(cleanMobile);
         if (cloud != null) return cloud;
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
     }
     final variations = _mobileVariations(cleanMobile);
     try {
@@ -1355,7 +1433,9 @@ class AuthService {
     if (userId == null && SupabaseService.isConfigured) {
       try {
         userId = Supabase.instance.client.auth.currentUser?.id;
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
     }
     if (userId == null) return null;
     final database = await db.database;
@@ -1403,7 +1483,11 @@ class AuthService {
     SupabaseAdminService.instance.clearAuthCache();
     await prefs.clearSession();
     // Sign out of Supabase Auth when configured (non-blocking).
-    unawaited(SupabaseAuthService.signOut());
+    unawaited(
+        SupabaseAuthService.signOut().catchError((Object e, StackTrace s) {
+      AppLogger.debug('AuthService: signOut note ($e)',
+          error: e, stackTrace: s);
+    }));
   }
 
   /// Permanently deletes the passenger or driver account from backend and local database.
@@ -1434,7 +1518,11 @@ class AuthService {
     }
     // 3. Clear session and sign out
     await prefs.clearSession();
-    unawaited(SupabaseAuthService.signOut());
+    unawaited(
+        SupabaseAuthService.signOut().catchError((Object e, StackTrace s) {
+      AppLogger.debug('AuthService: deleteAccount signOut note ($e)',
+          error: e, stackTrace: s);
+    }));
   }
 
   /// Downloads user details, past trips, and profile data from the cloud into local SQLite.
@@ -1481,16 +1569,25 @@ class AuthService {
       try {
         final cloud = await SupabaseService.instance.getUser(id);
         if (cloud != null) {
-          unawaited(_cacheUser(cloud));
+          unawaited(_cacheUser(cloud).catchError((Object e, StackTrace s) {
+            AppLogger.debug('AuthService: getUser cache cloud note ($e)',
+                error: e, stackTrace: s);
+          }));
           return cloud;
         }
         final cloudAdmin = await SupabaseService.instance.getAdminAccount(id);
         if (cloudAdmin != null) {
           final adminUser = cloudAdmin.toUser();
-          unawaited(_cacheUser(adminUser));
+          unawaited(_cacheUser(adminUser).catchError((Object e, StackTrace s) {
+            AppLogger.debug('AuthService: getUser cache admin note ($e)',
+                error: e, stackTrace: s);
+          }));
           return adminUser;
         }
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.debug('AuthService: getUser cloud lookup note ($e)',
+            error: e, stackTrace: s);
+      }
     }
 
     try {
@@ -1521,10 +1618,16 @@ class AuthService {
       final database = await db.database;
       await database
           .update('users', user.toMap(), where: 'id = ?', whereArgs: [user.id]);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AuthService: updateUser local note ($e)',
+          error: e, stackTrace: s);
+    }
     try {
       await SupabaseService.instance.saveUser(user);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AuthService: updateUser remote note ($e)',
+          error: e, stackTrace: s);
+    }
   }
 
   Future<void> updateDriverProfile(DriverProfile profile) async {
@@ -1535,26 +1638,30 @@ class AuthService {
         profile.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AuthService: updateDriverProfile local note ($e)',
+          error: e, stackTrace: s);
+    }
     if (SupabaseService.isConfigured) {
       try {
         await SupabaseService.instance.updateDriverProfile(profile);
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.debug('AuthService: updateDriverProfile remote note ($e)',
+            error: e, stackTrace: s);
+      }
     }
   }
 
-  Future<void> _cacheUser(AppUser user) async {
-    try {
-      final database = await db.database;
-      await database.transaction((txn) async {
-        final updated = await txn.update('users', user.toMap(),
-            where: 'id = ?', whereArgs: [user.id]);
-        if (updated == 0) await txn.insert('users', user.toMap());
+  Future<void> _cacheUser(AppUser user) => _synchronized(() async {
+        try {
+          final database = await db.database;
+          await database.insert('users', user.toMap(),
+              conflictAlgorithm: ConflictAlgorithm.replace);
+        } catch (e, s) {
+          AppLogger.debug('AuthService: _cacheUser note ($e)',
+              error: e, stackTrace: s);
+        }
       });
-    } catch (e) {
-      debugPrint('AuthService: _cacheUser note ($e)');
-    }
-  }
 
   Future<void> setOnline(String userId, bool online) async {
     try {
@@ -1573,7 +1680,9 @@ class AuthService {
       if (user != null) {
         await SupabaseService.instance.saveUser(user);
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
   }
 
   /// Persists a driver's last known GPS coordinates to the local database
@@ -1601,7 +1710,9 @@ class AuthService {
       try {
         final profile = await SupabaseService.instance.getDriverProfile(userId);
         if (profile != null) return profile;
-      } catch (_) {}
+      } catch (e, s) {
+      AppLogger.debug('AuthService non-fatal note: $e', error: e, stackTrace: s);
+    }
     }
     try {
       final database = await db.database;
@@ -1728,26 +1839,52 @@ class AuthService {
     }
     try {
       final database = await db.database;
-      await database.update(
-        'users',
-        {
-          'status': status,
-          'rejection_reason': reason,
-          'verified_at': status == AccountStatus.approved
-              ? DateTime.now().millisecondsSinceEpoch
-              : null,
-        },
-        where: 'id = ?',
-        whereArgs: [userId],
-      );
+      if (status == AccountStatus.rejected) {
+        // Preserve passenger account status when rejecting a driver application
+        await database.update(
+          'users',
+          {
+            'status': status,
+            'rejection_reason': reason,
+            'verified_at': null,
+          },
+          where: 'id = ? AND role = ?',
+          whereArgs: [userId, UserRole.driver],
+        );
+        await database.update(
+          'users',
+          {
+            'rejection_reason': reason,
+          },
+          where: 'id = ? AND role != ?',
+          whereArgs: [userId, UserRole.driver],
+        );
+      } else {
+        await database.update(
+          'users',
+          {
+            'status': status,
+            'rejection_reason': reason,
+            'verified_at': status == AccountStatus.approved
+                ? DateTime.now().millisecondsSinceEpoch
+                : null,
+          },
+          where: 'id = ?',
+          whereArgs: [userId],
+        );
+      }
     } catch (e) {
       debugPrint('AuthService: setDriverStatus local db note ($e)');
     }
     try {
       final user = await getUser(userId);
       if (user != null) {
+        final effectiveStatus =
+            (status == AccountStatus.rejected && !user.isDriver)
+                ? user.status
+                : status;
         final updated = user.copyWith(
-          status: status,
+          status: effectiveStatus,
           rejectionReason: reason,
           verifiedAt: status == AccountStatus.approved ? DateTime.now() : null,
         );
@@ -1756,7 +1893,10 @@ class AuthService {
           await SupabaseService.instance.saveUser(updated);
         }
       }
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('AuthService: setDriverStatus cache note ($e)',
+          error: e, stackTrace: s);
+    }
   }
 
   Future<List<AppUser>> findDrivers({required String vehicleType}) async {

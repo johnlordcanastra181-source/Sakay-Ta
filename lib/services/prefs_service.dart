@@ -8,22 +8,23 @@ class PrefsService {
   // [PrefsService.initialize()] before runApp() is called, so the Pigeon-based
   // Android platform channel is already registered when the first read fires.
   SharedPreferences? _prefs;
+  static Future<SharedPreferences>? _initFuture;
 
-  /// Must be called in main() after WidgetsFlutterBinding.ensureInitialized()
-  /// and before runApp(). This guarantees the platform channel is ready.
+  /// Initializes SharedPreferences. Can be awaited or called in background;
+  /// all async getters/setters also auto-initialize if needed.
   static Future<void> initialize() async {
-    instance._prefs = await SharedPreferences.getInstance();
+    final p = await SharedPreferences.getInstance();
+    instance._prefs = p;
+    _initFuture = Future.value(p);
   }
 
-  SharedPreferences get _p {
-    // Fallback safety: if prefs are not yet initialized (e.g. in tests),
-    // throw a clear error instead of a confusing PlatformException.
-    if (_prefs == null) {
-      throw StateError(
-        'PrefsService.initialize() must be called before using PrefsService.',
-      );
-    }
-    return _prefs!;
+  Future<SharedPreferences> _ensurePrefs() async {
+    final existing = _prefs;
+    if (existing != null) return existing;
+    _initFuture ??= SharedPreferences.getInstance();
+    final resolved = await _initFuture!;
+    _prefs = resolved;
+    return resolved;
   }
 
   static const kLocale = 'locale';
@@ -39,52 +40,57 @@ class PrefsService {
   static const kDriverApplicationStatusToken = 'driver_application_status_token';
   static const kDriverApplicationEmail = 'driver_application_email';
 
-  Future<String> get locale async => _p.getString(kLocale) ?? 'en';
+  Future<String> get locale async => (await _ensurePrefs()).getString(kLocale) ?? 'en';
 
   Future<void> setLocale(String value) async =>
-      await _p.setString(kLocale, value);
+      await (await _ensurePrefs()).setString(kLocale, value);
 
-  Future<bool> get darkMode async => _p.getBool(kDarkMode) ?? false;
+  Future<bool> get darkMode async =>
+      (await _ensurePrefs()).getBool(kDarkMode) ?? false;
 
   Future<void> setDarkMode(bool value) async =>
-      await _p.setBool(kDarkMode, value);
+      await (await _ensurePrefs()).setBool(kDarkMode, value);
 
   Future<bool> get notificationsEnabled async =>
-      _p.getBool(kNotificationsEnabled) ?? true;
+      (await _ensurePrefs()).getBool(kNotificationsEnabled) ?? true;
 
   Future<void> setNotificationsEnabled(bool value) async =>
-      await _p.setBool(kNotificationsEnabled, value);
+      await (await _ensurePrefs()).setBool(kNotificationsEnabled, value);
 
   Future<bool> get soundAlertsEnabled async =>
-      _p.getBool(kSoundAlertsEnabled) ?? true;
+      (await _ensurePrefs()).getBool(kSoundAlertsEnabled) ?? true;
 
   Future<void> setSoundAlertsEnabled(bool value) async =>
-      await _p.setBool(kSoundAlertsEnabled, value);
+      await (await _ensurePrefs()).setBool(kSoundAlertsEnabled, value);
 
   Future<bool> get autoAcceptRides async =>
-      _p.getBool(kAutoAcceptRides) ?? false;
+      (await _ensurePrefs()).getBool(kAutoAcceptRides) ?? false;
 
   Future<void> setAutoAcceptRides(bool value) async =>
-      await _p.setBool(kAutoAcceptRides, value);
+      await (await _ensurePrefs()).setBool(kAutoAcceptRides, value);
 
   Future<double> get pickupRadiusKm async =>
-      _p.getDouble(kPickupRadiusKm) ?? 5.0;
+      (await _ensurePrefs()).getDouble(kPickupRadiusKm) ?? 5.0;
 
   Future<void> setPickupRadiusKm(double value) async =>
-      await _p.setDouble(kPickupRadiusKm, value);
+      await (await _ensurePrefs()).setDouble(kPickupRadiusKm, value);
 
-  Future<String?> get sessionUserId async => _p.getString(kSessionUserId);
+  Future<String?> get sessionUserId async =>
+      (await _ensurePrefs()).getString(kSessionUserId);
 
-  Future<String?> get sessionRole async => _p.getString(kSessionRole);
+  Future<String?> get sessionRole async =>
+      (await _ensurePrefs()).getString(kSessionRole);
 
   Future<void> saveSession(String userId, String role) async {
-    await _p.setString(kSessionUserId, userId);
-    await _p.setString(kSessionRole, role);
+    final p = await _ensurePrefs();
+    await p.setString(kSessionUserId, userId);
+    await p.setString(kSessionRole, role);
   }
 
   Future<void> clearSession() async {
-    await _p.remove(kSessionUserId);
-    await _p.remove(kSessionRole);
+    final p = await _ensurePrefs();
+    await p.remove(kSessionUserId);
+    await p.remove(kSessionRole);
   }
 
   Future<void> saveDriverApplicationReceipt({
@@ -92,16 +98,18 @@ class PrefsService {
     required String statusToken,
     required String email,
   }) async {
-    await _p.setString(kDriverApplicationId, applicationId);
-    await _p.setString(kDriverApplicationStatusToken, statusToken);
-    await _p.setString(kDriverApplicationEmail, email);
+    final p = await _ensurePrefs();
+    await p.setString(kDriverApplicationId, applicationId);
+    await p.setString(kDriverApplicationStatusToken, statusToken);
+    await p.setString(kDriverApplicationEmail, email);
   }
 
   Future<({String applicationId, String statusToken, String email})?>
       get driverApplicationReceipt async {
-    final applicationId = _p.getString(kDriverApplicationId);
-    final statusToken = _p.getString(kDriverApplicationStatusToken);
-    final email = _p.getString(kDriverApplicationEmail);
+    final p = await _ensurePrefs();
+    final applicationId = p.getString(kDriverApplicationId);
+    final statusToken = p.getString(kDriverApplicationStatusToken);
+    final email = p.getString(kDriverApplicationEmail);
     if (applicationId == null || statusToken == null || email == null) {
       return null;
     }
@@ -113,8 +121,9 @@ class PrefsService {
   }
 
   Future<void> clearDriverApplicationReceipt() async {
-    await _p.remove(kDriverApplicationId);
-    await _p.remove(kDriverApplicationStatusToken);
-    await _p.remove(kDriverApplicationEmail);
+    final p = await _ensurePrefs();
+    await p.remove(kDriverApplicationId);
+    await p.remove(kDriverApplicationStatusToken);
+    await p.remove(kDriverApplicationEmail);
   }
 }

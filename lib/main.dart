@@ -8,6 +8,8 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/supabase_config.dart';
 import 'core/constants.dart';
+import 'core/logger.dart';
+import 'core/philippine_time.dart';
 
 import 'models/app_user.dart';
 import 'services/auth_service.dart';
@@ -31,13 +33,27 @@ import 'pages/heading_home.dart' as heading;
 import 'pages/admin_dashboard.dart' as admin_dashboard;
 import 'pages/passenger_signup.dart' as passenger_signup;
 import 'services/deep_link_service.dart';
+import 'services/password_change_service.dart';
+import 'services/password_recovery_service.dart';
 import 'l10n/app_localizations.dart';
 import 'core/theme.dart';
+import 'widgets/sakay_ta_splash_screen.dart';
 import 'admin_main.dart' as admin;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PhilippineTime.initialize();
   debugPrint('[SakayTa][Platform] kIsWeb=$kIsWeb');
+
+  // Silence all verbose logging in release mode to eliminate Android logcat IPC stalls.
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
+
+  // Cap decoded bitmap image cache to 30 MB / 100 images so low-RAM (1-2 GB)
+  // devices never suffer GC thrashing or Android LMK background kills.
+  PaintingBinding.instance.imageCache.maximumSize = 100;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 30 * 1024 * 1024;
 
   // Top-level error safety to log uncaught errors and prevent raw crash screens
   FlutterError.onError = (details) {
@@ -48,13 +64,29 @@ void main() async {
     debugPrint('[SakayTa][PlatformDispatcher] unhandled async error: $error');
     return true;
   };
+  ErrorWidget.builder = (FlutterErrorDetails details) {
+    debugPrint('[SakayTa][ErrorWidget] ${details.exceptionAsString()}');
+    return Material(
+      color: Colors.transparent,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            'Unable to display this section right now.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ),
+    );
+  };
 
-  // Initialize SharedPreferences BEFORE runApp so the Pigeon-based Android
-  // platform channel ("SharedPreferencesApi.getAll") is guaranteed to be
-  // registered when the first prefs read fires from AppState.init().
-  // Failing to do this causes PlatformException(channel-error).
   try {
-    await PrefsService.initialize();
+    await PrefsService.initialize().timeout(const Duration(milliseconds: 600));
   } catch (e) {
     debugPrint('SharedPreferences initialization warning: $e');
   }
@@ -68,15 +100,16 @@ void main() async {
   debugPrint('[SakayTa][Router] Initial route=/login');
 
   try {
-    await SupabaseConfig.initialize();
-    // Finish Supabase setup before any widget can use auth or cloud data.
-    await SupabaseService.instance.init();
+    await SupabaseConfig.initialize().timeout(const Duration(milliseconds: 800));
+    await SupabaseService.instance.init().timeout(const Duration(milliseconds: 800));
   } catch (e) {
     debugPrint('[SakayTa][Supabase] initialization disabled: $e');
   }
-  // Surface clear guidance when the generated credentials are placeholders.
 
-  unawaited(DeepLinkService.instance.init());
+  unawaited(
+      DeepLinkService.instance.init().catchError((Object e, StackTrace s) {
+    AppLogger.warn('DeepLinkService.init error: $e', error: e, stackTrace: s);
+  }));
 
   runApp(
     MultiProvider(
@@ -210,13 +243,15 @@ class SakayTaApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final localeProvider = context.watch<LocaleProvider>();
-    final app = context.watch<AppState>();
+    return Consumer2<LocaleProvider, AppState>(
+      builder: (context, localeProvider, app, _) {
+        final locale = localeProvider.locale;
+        final darkMode = app.darkMode;
 
-    return MaterialApp(
+        return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Sakay Ta',
-      locale: localeProvider.locale,
+      locale: locale,
       supportedLocales: const [
         Locale('en'),
         Locale('ceb'),
@@ -244,8 +279,12 @@ class SakayTaApp extends StatelessWidget {
       },
       theme: SakayTheme.light(),
       darkTheme: SakayTheme.dark(),
-      themeMode: app.darkMode ? ThemeMode.dark : ThemeMode.light,
+      themeMode: darkMode ? ThemeMode.dark : ThemeMode.light,
+      themeAnimationDuration: const Duration(milliseconds: 250),
+      themeAnimationCurve: Curves.easeInOut,
       home: const _HomeNavigator(),
+    );
+      },
     );
   }
 }
@@ -259,36 +298,46 @@ class _HomeNavigator extends StatefulWidget {
 
 class _HomeNavigatorState extends State<_HomeNavigator> {
   AppScreen screen = AppScreen.login;
+  bool _showSplash = true;
   StreamSubscription<AuthState>? _authSubscription;
   void go(AppScreen value) => setState(() => screen = value);
+
+  void _ensureAuthSubscription() {
+    if (_authSubscription != null || !SupabaseConfig.isInitialized) return;
+    final auth = Supabase.instance.client.auth;
+    void routeInvite(User? user) {
+      if (AppState.instance.currentUser != null ||
+          PasswordChangeService.isFlowActive ||
+          PasswordRecoveryService.isFlowActive) {
+        return;
+      }
+      final metadata = user?.userMetadata;
+      final applicationId = metadata?['driver_application_id'];
+      if (applicationId != null &&
+          metadata?['driver_account_activated'] != true &&
+          mounted) {
+        setState(() => screen = AppScreen.driverActivation);
+      }
+    }
+
+    routeInvite(auth.currentUser);
+    _authSubscription = auth.onAuthStateChange.listen((state) {
+      routeInvite(state.session?.user);
+    });
+  }
 
   @override
   void initState() {
     super.initState();
 
-    if (SupabaseConfig.isInitialized) {
-      final auth = Supabase.instance.client.auth;
-      void routeInvite(User? user) {
-        final metadata = user?.userMetadata;
-        final applicationId = metadata?['driver_application_id'];
-        if (applicationId != null &&
-            metadata?['driver_account_activated'] != true &&
-            mounted) {
-          setState(() => screen = AppScreen.driverActivation);
-        }
-      }
-
-      routeInvite(auth.currentUser);
-      _authSubscription = auth.onAuthStateChange.listen((state) {
-        routeInvite(state.session?.user);
-      });
-    }
+    _ensureAuthSubscription();
 
     // Restore an existing session: once AppState has finished initializing,
     // jump straight to the role-appropriate home screen instead of the login
     // page (no-op when there is no saved session).
     final app = AppState.instance;
     void maybeRestore() {
+      _ensureAuthSubscription();
       if (app.initializing) return;
       if (app.currentUser == null) {
         if (screen != AppScreen.driverActivation &&
@@ -328,10 +377,22 @@ class _HomeNavigatorState extends State<_HomeNavigator> {
 
   @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
-    final targetScreen = _guardScreen(screen, app.currentUser);
+    if (_showSplash) {
+      return SakayTaSplashScreen(
+        onFinished: () {
+          if (mounted) {
+            setState(() => _showSplash = false);
+          }
+        },
+      );
+    }
 
-    return switch (targetScreen) {
+    return Selector<AppState, AppUser?>(
+      selector: (_, app) => app.currentUser,
+      builder: (context, currentUser, _) {
+        final targetScreen = _guardScreen(screen, currentUser);
+
+        return switch (targetScreen) {
       AppScreen.login => login.LoginPage(onNavigate: go),
       AppScreen.passengerRegistration =>
         passenger_signup.PassengerSignupPage(onNavigate: go),
@@ -354,6 +415,8 @@ class _HomeNavigatorState extends State<_HomeNavigator> {
       AppScreen.adminDashboard =>
         admin_dashboard.AdminDashboard(onNavigate: go),
     };
+      },
+    );
   }
 }
 

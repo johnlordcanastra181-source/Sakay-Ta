@@ -20,6 +20,8 @@ class RideDetailsModal extends StatelessWidget {
     required RideEntry entry,
     VoidCallback? onRateTrip,
   }) {
+    debugPrint('[SakayTa][Perf][Receipt] open rideId=${entry.trip.id} '
+        'source=preloaded_entry durationMs=0');
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -31,20 +33,52 @@ class RideDetailsModal extends StatelessWidget {
     );
   }
 
+  static Future<void> showForWalletEntry(
+    BuildContext context, {
+    required WalletEntry walletEntry,
+    required AppState app,
+  }) {
+    final rideId = walletEntry.rideId?.trim() ?? '';
+    if (rideId.isNotEmpty) {
+      final cached = app.getCachedRideEntryById(rideId);
+      if (cached != null) {
+        return show(context, entry: cached);
+      }
+    }
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _WalletEntryReceiptSheet(
+        walletEntry: walletEntry,
+        app: app,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final trip = entry.trip;
     final isCompleted = trip.status == RideStatus.completed;
     final dateFormatted = DateFormat('MMM dd, yyyy • hh:mm a')
         .format(trip.completedAt ?? trip.createdAt);
+    final driverDisplay = entry.driverName.isNotEmpty
+        ? entry.driverName
+        : (isCompleted || (trip.driverId?.trim().isNotEmpty ?? false)
+            ? 'Assigned Driver'
+            : 'Driver Assignment Pending');
+    final passengerDisplay =
+        trip.passengerName.trim().isNotEmpty ? trip.passengerName.trim() : null;
 
     return Container(
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.88,
       ),
       padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
+      decoration: BoxDecoration(
+        color: AppColors.cardColor(isDark),
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: SingleChildScrollView(
@@ -114,9 +148,7 @@ class RideDetailsModal extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          entry.driverName.isNotEmpty
-                              ? entry.driverName
-                              : 'Driver Assignment Pending',
+                          driverDisplay,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
@@ -131,6 +163,16 @@ class RideDetailsModal extends StatelessWidget {
                             color: Color(0xFF6B7280),
                           ),
                         ),
+                        if (passengerDisplay != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Passenger: $passengerDisplay',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -269,7 +311,7 @@ class RideDetailsModal extends StatelessWidget {
               child: Column(
                 children: [
                   _receiptRow(
-                    'Base Fare (${trip.vehicleType == VehicleType.tricycle ? "Tricycle" : "Habal"})',
+                    'Minimum Fare (${trip.vehicleType == VehicleType.tricycle ? "Tricycle" : "Habal"})',
                     '₱${trip.vehicleType.baseFare.toStringAsFixed(2)}',
                   ),
                   const SizedBox(height: 6),
@@ -420,6 +462,279 @@ class RideDetailsModal extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.bold,
             color: Color(0xFF1E1E1E),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WalletEntryReceiptSheet extends StatefulWidget {
+  const _WalletEntryReceiptSheet({
+    required this.walletEntry,
+    required this.app,
+  });
+
+  final WalletEntry walletEntry;
+  final AppState app;
+
+  @override
+  State<_WalletEntryReceiptSheet> createState() =>
+      _WalletEntryReceiptSheetState();
+}
+
+class _WalletEntryReceiptSheetState extends State<_WalletEntryReceiptSheet> {
+  Future<RideEntry?>? _rideEntryFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    final rideId = widget.walletEntry.rideId?.trim() ?? '';
+    if (rideId.isNotEmpty) {
+      _rideEntryFuture = widget.app.getOrFetchRideEntryById(rideId);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+
+    final entry = widget.walletEntry;
+    if (_rideEntryFuture != null) {
+      return FutureBuilder<RideEntry?>(
+        future: _rideEntryFuture,
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return RideDetailsModal(entry: snapshot.data!);
+          }
+          return _buildImmediateWalletReceipt(
+            context,
+            entry,
+            isLoadingTrip: snapshot.connectionState == ConnectionState.waiting,
+          );
+        },
+      );
+    }
+    return _buildImmediateWalletReceipt(
+      context,
+      entry,
+      isLoadingTrip: false,
+    );
+  }
+
+  Widget _buildImmediateWalletReceipt(
+    BuildContext context,
+    WalletEntry entry, {
+    required bool isLoadingTrip,
+  }) {
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final formatter = NumberFormat('#,##0.00', 'en_US');
+    final dateFormatted =
+        DateFormat('MMM dd, yyyy • hh:mm a').format(entry.createdAt);
+    final isIncome = entry.type == 'income';
+    final statusText = (entry.status ?? 'Completed').toUpperCase();
+    final refCode = (entry.rideId ?? entry.reference ?? entry.id);
+    final shortRef =
+        refCode.substring(0, refCode.length > 8 ? 8 : refCode.length).toUpperCase();
+
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.cardColor(isDark),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isIncome ? 'Trip Receipt & Details' : 'Transaction Receipt',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1E1E1E),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Receipt: ST-$shortRef',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF6B7280),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF9FAFB),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: AppColors.terracotta.withValues(alpha: 0.16),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isIncome
+                          ? Icons.payments_rounded
+                          : Icons.account_balance_wallet_rounded,
+                      color: AppColors.terracotta,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.description,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1E1E1E),
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          dateFormatted,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF6B7280),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFECFDF5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      statusText,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF059669),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (isLoadingTrip) ...[
+              const SizedBox(height: 14),
+              const LinearProgressIndicator(minHeight: 2),
+            ],
+            const SizedBox(height: 18),
+            const Text(
+              'Payment Summary',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E1E1E),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                children: [
+                  if (entry.rideId != null && entry.rideId!.isNotEmpty) ...[
+                    _kvRow('Ride Reference', entry.rideId!),
+                    const SizedBox(height: 6),
+                  ],
+                  _kvRow('Payment Method', entry.method.toUpperCase()),
+                  if (entry.grossFare != null) ...[
+                    const SizedBox(height: 6),
+                    _kvRow(
+                      'Gross Fare',
+                      '₱${formatter.format(entry.grossFare!)}',
+                    ),
+                  ],
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Divider(height: 1),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isIncome ? 'Total Amount' : 'Withdrawal Amount',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF1E1E1E),
+                        ),
+                      ),
+                      Text(
+                        '${entry.amount >= 0 ? "+" : "-"}₱${formatter.format(entry.amount.abs())}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF059669),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _kvRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E1E1E),
+            ),
           ),
         ),
       ],

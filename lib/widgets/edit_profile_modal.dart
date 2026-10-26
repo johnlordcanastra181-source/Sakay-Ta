@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../core/neumorphic_theme.dart';
 import '../core/theme.dart';
 import '../models/app_user.dart';
 import '../services/supabase_storage_service.dart';
 import '../services/supabase_service.dart';
 import '../state/app_state.dart';
+import 'neumorphic_widgets.dart';
 import 'user_avatar.dart';
 
 class EditProfileModal extends StatefulWidget {
@@ -255,8 +257,17 @@ class _EditProfileModalState extends State<EditProfileModal> {
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          color: NeumorphicColors.surface(isDark),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.5)
+                  : const Color(0xFFA6B4C9).withValues(alpha: 0.35),
+              blurRadius: 16,
+              offset: const Offset(0, -6),
+            ),
+          ],
         ),
         child: SingleChildScrollView(
           child: Column(
@@ -272,39 +283,48 @@ class _EditProfileModalState extends State<EditProfileModal> {
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.textColor(isDark),
+                      color: NeumorphicColors.text(isDark),
+                      letterSpacing: -0.3,
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.close_rounded,
-                        color: AppColors.textColor(isDark)),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: NeumorphicColors.subtext(isDark),
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
 
               // Avatar with Photo / Color Picker
               Center(
                 child: Stack(
                   children: [
-                    GestureDetector(
-                      onTap: _choosePhotoSource,
-                      child: CircleAvatar(
-                        radius: 46,
-                        backgroundColor: _avatarColors[_selectedAvatarIndex]
-                            .withValues(alpha: 0.18),
-                        foregroundImage: _photoPreview(),
-                        onForegroundImageError:
-                            _photoPreview() != null ? (_, __) {} : null,
-                        child: Text(
-                          _nameCtrl.text.isNotEmpty
-                              ? _nameCtrl.text[0].toUpperCase()
-                              : 'P',
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            color: _avatarColors[_selectedAvatarIndex],
+                    Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: NeumorphicDecorations.subtleShadows(isDark),
+                      ),
+                      child: GestureDetector(
+                        onTap: _choosePhotoSource,
+                        child: CircleAvatar(
+                          radius: 48,
+                          backgroundColor: _avatarColors[_selectedAvatarIndex]
+                              .withValues(alpha: 0.18),
+                          foregroundImage: _photoPreview(),
+                          onForegroundImageError:
+                              _photoPreview() != null ? (_, __) {} : null,
+                          child: Text(
+                            _nameCtrl.text.isNotEmpty
+                                ? _nameCtrl.text[0].toUpperCase()
+                                : 'P',
+                            style: TextStyle(
+                              fontSize: 38,
+                              fontWeight: FontWeight.w900,
+                              color: _avatarColors[_selectedAvatarIndex],
+                            ),
                           ),
                         ),
                       ),
@@ -315,12 +335,21 @@ class _EditProfileModalState extends State<EditProfileModal> {
                       child: GestureDetector(
                         onTap: _choosePhotoSource,
                         child: Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.all(7),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF059669),
+                            color: NeumorphicColors.brandPrimary,
                             shape: BoxShape.circle,
                             border: Border.all(
-                                color: AppColors.cardColor(isDark), width: 2),
+                              color: NeumorphicColors.surface(isDark),
+                              width: 2.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.15),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: const Icon(
                             Icons.camera_alt_rounded,
@@ -333,7 +362,7 @@ class _EditProfileModalState extends State<EditProfileModal> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
 
               // Action buttons: change / remove photo
               Row(
@@ -341,25 +370,43 @@ class _EditProfileModalState extends State<EditProfileModal> {
                 children: [
                   TextButton.icon(
                     onPressed: _choosePhotoSource,
-                    icon: const Icon(Icons.photo_library_rounded, size: 18),
-                    label: const Text('Change Photo'),
+                    icon: Icon(
+                      Icons.photo_library_rounded,
+                      size: 18,
+                      color: NeumorphicColors.brandPrimary,
+                    ),
+                    label: Text(
+                      'Change Photo',
+                      style: TextStyle(
+                        color: NeumorphicColors.brandPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                   if (widget.user.profilePhotoUrl != null ||
                       _photoBytes != null) ...[
-                    const Text('•', style: TextStyle(color: Color(0xFFCBD5E1))),
+                    Text('•',
+                        style: TextStyle(color: NeumorphicColors.subtext(isDark))),
                     TextButton.icon(
                       onPressed: () => setState(() {
                         _removePhoto = true;
                         _photoBytes = null;
                         _photoPath = null;
                       }),
-                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                      label: const Text('Remove'),
+                      icon: const Icon(Icons.delete_outline_rounded,
+                          size: 18, color: Color(0xFFDC2626)),
+                      label: const Text(
+                        'Remove',
+                        style: TextStyle(
+                          color: Color(0xFFDC2626),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ],
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
 
               // Color options
               Wrap(
@@ -371,118 +418,111 @@ class _EditProfileModalState extends State<EditProfileModal> {
                   return GestureDetector(
                     onTap: () => setState(() => _selectedAvatarIndex = i),
                     child: Container(
-                      width: 32,
-                      height: 32,
+                      width: 34,
+                      height: 34,
                       decoration: BoxDecoration(
                         color: _avatarColors[i],
                         shape: BoxShape.circle,
                         border: isSelected
                             ? Border.all(
-                                color: AppColors.textColor(isDark), width: 2)
+                                color: isDark ? Colors.white : const Color(0xFF1E293B),
+                                width: 3,
+                              )
                             : null,
+                        boxShadow: [
+                          BoxShadow(
+                            color: _avatarColors[i].withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
                     ),
                   );
                 }),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
 
-              // Form fields
-              TextField(
-                controller: _nameCtrl,
-                style: TextStyle(color: AppColors.textColor(isDark)),
-                decoration: InputDecoration(
-                  labelText: 'Full Name',
-                  labelStyle: TextStyle(color: AppColors.subtextColor(isDark)),
-                  prefixIcon: Icon(Icons.person_rounded,
-                      color: AppColors.subtextColor(isDark)),
-                  filled: true,
-                  fillColor: AppColors.inputBgColor(isDark),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: AppColors.borderColor(isDark)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: AppColors.borderColor(isDark)),
+              // Form fields with Neumorphic Inset
+              Container(
+                decoration: NeumorphicDecorations.inset(
+                  isDark: isDark,
+                  radius: 14,
+                ),
+                child: TextField(
+                  controller: _nameCtrl,
+                  style: TextStyle(color: NeumorphicColors.text(isDark)),
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    labelStyle: TextStyle(
+                      color: NeumorphicColors.subtext(isDark),
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(Icons.person_rounded,
+                        color: NeumorphicColors.subtext(isDark)),
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: InputBorder.none,
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _mobileCtrl,
-                keyboardType: TextInputType.phone,
-                style: TextStyle(color: AppColors.textColor(isDark)),
-                decoration: InputDecoration(
-                  labelText: 'Mobile Number',
-                  labelStyle: TextStyle(color: AppColors.subtextColor(isDark)),
-                  prefixIcon: Icon(Icons.phone_iphone_rounded,
-                      color: AppColors.subtextColor(isDark)),
-                  filled: true,
-                  fillColor: AppColors.inputBgColor(isDark),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: AppColors.borderColor(isDark)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: AppColors.borderColor(isDark)),
+              const SizedBox(height: 14),
+              Container(
+                decoration: NeumorphicDecorations.inset(
+                  isDark: isDark,
+                  radius: 14,
+                ),
+                child: TextField(
+                  controller: _mobileCtrl,
+                  keyboardType: TextInputType.phone,
+                  style: TextStyle(color: NeumorphicColors.text(isDark)),
+                  decoration: InputDecoration(
+                    labelText: 'Mobile Number',
+                    labelStyle: TextStyle(
+                      color: NeumorphicColors.subtext(isDark),
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(Icons.phone_iphone_rounded,
+                        color: NeumorphicColors.subtext(isDark)),
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: InputBorder.none,
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _emailCtrl,
-                keyboardType: TextInputType.emailAddress,
-                style: TextStyle(color: AppColors.textColor(isDark)),
-                decoration: InputDecoration(
-                  labelText: 'Email Address',
-                  labelStyle: TextStyle(color: AppColors.subtextColor(isDark)),
-                  prefixIcon: Icon(Icons.email_outlined,
-                      color: AppColors.subtextColor(isDark)),
-                  filled: true,
-                  fillColor: AppColors.inputBgColor(isDark),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: AppColors.borderColor(isDark)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        BorderSide(color: AppColors.borderColor(isDark)),
+              const SizedBox(height: 14),
+              Container(
+                decoration: NeumorphicDecorations.inset(
+                  isDark: isDark,
+                  radius: 14,
+                ),
+                child: TextField(
+                  controller: _emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: TextStyle(color: NeumorphicColors.text(isDark)),
+                  decoration: InputDecoration(
+                    labelText: 'Email Address',
+                    labelStyle: TextStyle(
+                      color: NeumorphicColors.subtext(isDark),
+                      fontSize: 13,
+                    ),
+                    prefixIcon: Icon(Icons.email_outlined,
+                        color: NeumorphicColors.subtext(isDark)),
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: InputBorder.none,
                   ),
                 ),
               ),
               const SizedBox(height: 24),
 
               // Save Button
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.terracotta,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
+              NeumorphicButton(
+                text: 'Save Changes',
+                accentColor: NeumorphicColors.brandPrimary,
+                isLoading: _isSaving,
+                height: 50,
                 onPressed: _isSaving ? null : _saveProfile,
-                child: _isSaving
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text(
-                        'Save Changes',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
               ),
             ],
           ),

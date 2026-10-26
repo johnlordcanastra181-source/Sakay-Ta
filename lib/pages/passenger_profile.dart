@@ -12,7 +12,6 @@ import '../services/saved_places_service.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 import '../widgets/edit_profile_modal.dart';
-import '../widgets/edit_vehicle_modal.dart';
 import '../widgets/help_center_modal.dart';
 import '../widgets/passenger_bottom_nav.dart';
 import '../widgets/saved_places_modal.dart';
@@ -957,7 +956,9 @@ class _PassengerProfileState extends State<PassengerProfile> {
 
         // VEHICLE & TODA INFORMATION
         Text(
-          'VEHICLE & TODA DETAILS',
+          driverProfile?.vehicleType == VehicleType.habal
+              ? 'VEHICLE DETAILS'
+              : 'VEHICLE & TODA DETAILS',
           style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.bold,
@@ -997,18 +998,38 @@ class _PassengerProfileState extends State<PassengerProfile> {
                       ),
                     ],
                   ),
-                  TextButton.icon(
-                    onPressed: () {
-                      if (driverProfile != null) {
-                        EditVehicleModal.show(context, profile: driverProfile);
-                      }
-                    },
-                    icon: const Icon(Icons.edit_outlined, size: 16),
-                    label: const Text('Edit'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.terracotta,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: app.darkMode
+                          ? const Color(0xFF1E293B)
+                          : const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: app.darkMode
+                            ? const Color(0xFF334155)
+                            : const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_outline_rounded,
+                          size: 12,
+                          color: AppColors.subtextColor(app.darkMode),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Registered',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.subtextColor(app.darkMode),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1034,12 +1055,14 @@ class _PassengerProfileState extends State<PassengerProfile> {
                   driverProfile?.color.isNotEmpty == true
                       ? driverProfile!.color
                       : 'Standard'),
-              const SizedBox(height: 6),
-              _detailRow(
-                  'TODA Affiliation',
-                  driverProfile?.todaName?.isNotEmpty == true
-                      ? driverProfile!.todaName!
-                      : 'Tagbilaran TODA'),
+              if (driverProfile?.vehicleType != VehicleType.habal) ...[
+                const SizedBox(height: 6),
+                _detailRow(
+                    'TODA Affiliation',
+                    driverProfile?.todaName?.isNotEmpty == true
+                        ? driverProfile!.todaName!
+                        : 'Not provided'),
+              ],
             ],
           ),
         ),
@@ -1062,73 +1085,76 @@ class _PassengerProfileState extends State<PassengerProfile> {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.borderColor(app.darkMode)),
           ),
-          child: Column(
-            children: [
-              SwitchListTile(
-                title: Text('Auto-Accept Nearby Rides',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13.5,
-                        color: AppColors.textColor(app.darkMode))),
-                subtitle: Text(
-                    'Immediately accepts incoming passenger bookings within range.',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.subtextColor(app.darkMode))),
-                value: app.autoAcceptRides,
-                activeThumbColor: Colors.white,
-                activeTrackColor: AppColors.terracotta,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) =>
-                    app.updateDriverPreferences(autoAccept: val),
-              ),
-              Divider(height: 16, color: AppColors.borderColor(app.darkMode)),
-              SwitchListTile(
-                title: Text('Audio Chime on Incoming Request',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13.5,
-                        color: AppColors.textColor(app.darkMode))),
-                subtitle: Text(
-                    'Plays distinct sound tone when a passenger books near you.',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.subtextColor(app.darkMode))),
-                value: app.soundAlertsEnabled,
-                activeThumbColor: Colors.white,
-                activeTrackColor: AppColors.terracotta,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (val) =>
-                    app.updateDriverPreferences(soundAlerts: val),
-              ),
-              Divider(height: 16, color: AppColors.borderColor(app.darkMode)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Search Pickup Radius',
+          child: Material(
+            color: Colors.transparent,
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: Text('Auto-Accept Nearby Rides',
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13.5,
                           color: AppColors.textColor(app.darkMode))),
-                  Text('${app.pickupRadiusKm.toStringAsFixed(1)} km',
-                      style: const TextStyle(
+                  subtitle: Text(
+                      'Immediately accepts incoming passenger bookings within range.',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.subtextColor(app.darkMode))),
+                  value: app.autoAcceptRides,
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: AppColors.terracotta,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (val) =>
+                      app.updateDriverPreferences(autoAccept: val),
+                ),
+                Divider(height: 16, color: AppColors.borderColor(app.darkMode)),
+                SwitchListTile(
+                  title: Text('Audio Chime on Incoming Request',
+                      style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: AppColors.terracotta)),
-                ],
-              ),
-              Slider(
-                value: app.pickupRadiusKm,
-                min: 1.0,
-                max: 10.0,
-                divisions: 9,
-                activeColor: AppColors.terracotta,
-                inactiveColor: app.darkMode
-                    ? const Color(0xFF334155)
-                    : const Color(0xFFE2E8F0),
-                label: '${app.pickupRadiusKm.toStringAsFixed(0)} km',
-                onChanged: (val) => app.updateDriverPreferences(radius: val),
-              ),
-            ],
+                          fontSize: 13.5,
+                          color: AppColors.textColor(app.darkMode))),
+                  subtitle: Text(
+                      'Plays distinct sound tone when a passenger books near you.',
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.subtextColor(app.darkMode))),
+                  value: app.soundAlertsEnabled,
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: AppColors.terracotta,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (val) =>
+                      app.updateDriverPreferences(soundAlerts: val),
+                ),
+                Divider(height: 16, color: AppColors.borderColor(app.darkMode)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Search Pickup Radius',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13.5,
+                            color: AppColors.textColor(app.darkMode))),
+                    Text('${app.pickupRadiusKm.toStringAsFixed(1)} km',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.terracotta)),
+                  ],
+                ),
+                Slider(
+                  value: app.pickupRadiusKm,
+                  min: 1.0,
+                  max: 10.0,
+                  divisions: 9,
+                  activeColor: AppColors.terracotta,
+                  inactiveColor: app.darkMode
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFE2E8F0),
+                  label: '${app.pickupRadiusKm.toStringAsFixed(0)} km',
+                  onChanged: (val) => app.updateDriverPreferences(radius: val),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 20),

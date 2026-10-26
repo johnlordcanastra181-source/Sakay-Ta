@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../core/theme.dart';
+import '../core/neumorphic_theme.dart';
 import '../core/time_utils.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart' hide Brand, Avatar;
 import '../state/app_state.dart';
 import 'password_recovery_page.dart';
 import '../widgets/common.dart';
+import '../widgets/neumorphic_widgets.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key, required this.onNavigate});
@@ -133,14 +134,14 @@ class _LoginPageState extends State<LoginPage> {
         app.darkMode || Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: AppColors.canvasColor(isDark),
+      backgroundColor: NeumorphicColors.canvas(isDark),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Top Navigation Bar: Brand on left, Theme Toggle on right
+              // Top Navigation Bar: Brand on left, Neumorphic Theme Toggle on right
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -148,9 +149,9 @@ class _LoginPageState extends State<LoginPage> {
                   _buildThemeToggle(context, isDark, app),
                 ],
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              // Role & Language Selector Row matching screenshot
+              // Role & Language Selector Row with soft depth
               Wrap(
                 alignment: WrapAlignment.spaceBetween,
                 crossAxisAlignment: WrapCrossAlignment.center,
@@ -159,110 +160,26 @@ class _LoginPageState extends State<LoginPage> {
                 children: [
                   // Segmented Role Toggle (Passenger | Driver)
                   Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppColors.darkCardElevated
-                          : const Color(0xFFEFEFEF),
-                      borderRadius: BorderRadius.circular(20),
+                    padding: const EdgeInsets.all(4),
+                    decoration: NeumorphicDecorations.inset(
+                      isDark: isDark,
+                      radius: 22,
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        GestureDetector(
+                        _buildRoleOption(
+                          label: l10n.rolePassenger,
+                          isSelected: _selectedRole == 'passenger',
+                          isDark: isDark,
                           onTap: () =>
                               setState(() => _selectedRole = 'passenger'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == 'passenger'
-                                  ? (isDark
-                                      ? AppColors.goldVibrant
-                                      : Colors.white)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(18),
-                              border: _selectedRole == 'passenger'
-                                  ? (isDark
-                                      ? Border.all(color: AppColors.goldVibrant)
-                                      : Border.all(
-                                          color: const Color(0xFFD0D0D0)))
-                                  : null,
-                              boxShadow: _selectedRole == 'passenger'
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Text(
-                              l10n.rolePassenger,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: _selectedRole == 'passenger'
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                color: _selectedRole == 'passenger'
-                                    ? (isDark
-                                        ? const Color(0xFF0F172A)
-                                        : const Color(0xFF1A1A1A))
-                                    : (isDark
-                                        ? AppColors.darkTextSecondary
-                                        : const Color(0xFF707070)),
-                              ),
-                            ),
-                          ),
                         ),
-                        GestureDetector(
+                        _buildRoleOption(
+                          label: l10n.roleDriver,
+                          isSelected: _selectedRole == 'driver',
+                          isDark: isDark,
                           onTap: () => setState(() => _selectedRole = 'driver'),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _selectedRole == 'driver'
-                                  ? (isDark
-                                      ? AppColors.goldVibrant
-                                      : Colors.white)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(18),
-                              border: _selectedRole == 'driver'
-                                  ? (isDark
-                                      ? Border.all(color: AppColors.goldVibrant)
-                                      : Border.all(
-                                          color: const Color(0xFFD0D0D0)))
-                                  : null,
-                              boxShadow: _selectedRole == 'driver'
-                                  ? [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.05),
-                                        blurRadius: 4,
-                                        offset: const Offset(0, 2),
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                            child: Text(
-                              l10n.roleDriver,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: _selectedRole == 'driver'
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                color: _selectedRole == 'driver'
-                                    ? (isDark
-                                        ? const Color(0xFF0F172A)
-                                        : const Color(0xFF1A1A1A))
-                                    : (isDark
-                                        ? AppColors.darkTextSecondary
-                                        : const Color(0xFF707070)),
-                              ),
-                            ),
-                          ),
                         ),
                       ],
                     ),
@@ -271,26 +188,25 @@ class _LoginPageState extends State<LoginPage> {
                   // Language Selector Pill
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: isDark
-                          ? AppColors.darkCardElevated
-                          : const Color(0xFFEFEFEF),
-                      borderRadius: BorderRadius.circular(20),
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    decoration: NeumorphicDecorations.raised(
+                      isDark: isDark,
+                      radius: 20,
+                      distance: 2.5,
+                      blur: 6.0,
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: localeCode,
                         isDense: true,
                         dropdownColor:
-                            isDark ? AppColors.darkCardElevated : Colors.white,
+                            isDark ? const Color(0xFF1E293B) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
                         icon: Padding(
                           padding: const EdgeInsets.only(left: 4),
                           child: Icon(Icons.arrow_drop_down,
                               size: 18,
-                              color: isDark
-                                  ? AppColors.darkTextSecondary
-                                  : const Color(0xFF404040)),
+                              color: NeumorphicColors.textSecondary(isDark)),
                         ),
                         items: [
                           DropdownMenuItem(
@@ -300,15 +216,15 @@ class _LoginPageState extends State<LoginPage> {
                               children: [
                                 Icon(Icons.language_rounded,
                                     size: 16,
-                                    color: isDark
-                                        ? AppColors.darkTextSecondary
-                                        : const Color(0xFF404040)),
+                                    color:
+                                        NeumorphicColors.textSecondary(isDark)),
                                 const SizedBox(width: 6),
                                 Text('English',
                                     style: TextStyle(
                                         fontSize: 13,
-                                        color: AppColors.textColor(isDark),
-                                        fontWeight: FontWeight.w500)),
+                                        color:
+                                            NeumorphicColors.textPrimary(isDark),
+                                        fontWeight: FontWeight.w600)),
                               ],
                             ),
                           ),
@@ -317,16 +233,18 @@ class _LoginPageState extends State<LoginPage> {
                             child: Text('🇵🇭 Cebuano',
                                 style: TextStyle(
                                     fontSize: 13,
-                                    color: AppColors.textColor(isDark),
-                                    fontWeight: FontWeight.w500)),
+                                    color:
+                                        NeumorphicColors.textPrimary(isDark),
+                                    fontWeight: FontWeight.w600)),
                           ),
                           DropdownMenuItem(
                             value: 'tl',
                             child: Text('🇵🇭 Tagalog',
                                 style: TextStyle(
                                     fontSize: 13,
-                                    color: AppColors.textColor(isDark),
-                                    fontWeight: FontWeight.w500)),
+                                    color:
+                                        NeumorphicColors.textPrimary(isDark),
+                                    fontWeight: FontWeight.w600)),
                           ),
                         ],
                         onChanged: (val) {
@@ -339,15 +257,15 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 32),
 
               // Greeting Header matching current local time
               Text(
                 '${TimeGreeting.getLocalizedGreeting(localeCode: localeCode)}!',
                 style: TextStyle(
                   fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textColor(isDark),
+                  fontWeight: FontWeight.w900,
+                  color: NeumorphicColors.textPrimary(isDark),
                   letterSpacing: -0.5,
                 ),
               ),
@@ -358,80 +276,39 @@ class _LoginPageState extends State<LoginPage> {
                     : l10n.loginSubtitleDriver,
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppColors.subtextColor(isDark),
+                  fontWeight: FontWeight.w500,
+                  color: NeumorphicColors.textSecondary(isDark),
                 ),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 28),
 
-              // Email Address Label & Input Field
-              Text(
-                l10n.profileEmail,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textColor(isDark),
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
+              // Email Address Inset Field
+              NeumorphicTextField(
+                label: l10n.profileEmail,
+                hintText: 'name@example.com',
                 controller: _emailCtrl,
                 keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                style: TextStyle(
-                    fontSize: 15,
-                    color: AppColors.textColor(isDark),
-                    fontWeight: FontWeight.w500),
-                decoration: InputDecoration(
-                  prefixIcon: Icon(
-                    Icons.email_outlined,
-                    color: AppColors.subtextColor(isDark),
-                    size: 22,
-                  ),
-                  hintText: 'name@example.com',
-                  hintStyle: TextStyle(
-                      color: AppColors.subtextColor(isDark), fontSize: 14),
-                  filled: true,
-                  fillColor: AppColors.inputBgColor(isDark),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? AppColors.darkBorder
-                            : const Color(0xFF998000),
-                        width: 1.2),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? AppColors.darkBorder
-                            : const Color(0xFF998000),
-                        width: 1.2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? AppColors.goldVibrant
-                            : const Color(0xFF6E5600),
-                        width: 2),
-                  ),
+                prefixIcon: Icon(
+                  Icons.email_outlined,
+                  color: NeumorphicColors.brandPrimary,
+                  size: 20,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
 
-              // Password Label & Forgot Password Link row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Password Row: Label & Forgot Password Link
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
                 children: [
                   Text(
                     l10n.loginPassword,
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textColor(isDark),
+                      color: NeumorphicColors.textSecondary(isDark),
                     ),
                   ),
                   GestureDetector(
@@ -440,144 +317,97 @@ class _LoginPageState extends State<LoginPage> {
                       l10n.loginForgotPassword,
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w700,
                         color: isDark
-                            ? AppColors.goldVibrant
-                            : const Color(0xFF735A00),
+                            ? NeumorphicColors.brandAmber
+                            : NeumorphicColors.brandPrimary,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
 
-              // Password Input Field matching screenshot
-              TextFormField(
+              // Password Inset Field
+              NeumorphicTextField(
+                hintText: '••••••••',
                 controller: _passwordCtrl,
                 obscureText: !_showPassword,
-                style: TextStyle(
-                    fontSize: 15,
-                    color: AppColors.textColor(isDark),
-                    fontWeight: FontWeight.w500),
-                decoration: InputDecoration(
-                  prefixIcon: Icon(
-                    Icons.lock_outline_rounded,
-                    color: AppColors.subtextColor(isDark),
+                prefixIcon: const Icon(
+                  Icons.lock_outline_rounded,
+                  color: NeumorphicColors.brandPrimary,
+                  size: 20,
+                ),
+                suffixIcon: IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 40, minHeight: 40),
+                  splashRadius: 20,
+                  icon: Icon(
+                    _showPassword
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_outlined,
+                    color: NeumorphicColors.textSecondary(isDark),
                     size: 20,
                   ),
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _showPassword
-                          ? Icons.visibility_rounded
-                          : Icons.visibility_off_outlined,
-                      color: AppColors.subtextColor(isDark),
-                      size: 20,
-                    ),
-                    onPressed: () =>
-                        setState(() => _showPassword = !_showPassword),
-                  ),
-                  hintText: '••••••••',
-                  hintStyle: TextStyle(
-                      color: AppColors.subtextColor(isDark), fontSize: 15),
-                  filled: true,
-                  fillColor: AppColors.inputBgColor(isDark),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? AppColors.darkBorder
-                            : const Color(0xFF998000),
-                        width: 1.2),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? AppColors.darkBorder
-                            : const Color(0xFF998000),
-                        width: 1.2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: isDark
-                            ? AppColors.goldVibrant
-                            : const Color(0xFF6E5600),
-                        width: 2),
-                  ),
+                  onPressed: () =>
+                      setState(() => _showPassword = !_showPassword),
                 ),
               ),
 
               if (_error != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 12),
+                  padding: const EdgeInsets.only(top: 14),
                   child: Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: isDark
-                          ? Colors.red.shade900.withValues(alpha: 0.3)
-                          : Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: isDark
-                              ? Colors.red.shade700
-                              : Colors.red.shade200),
-                    ),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(color: Colors.red, fontSize: 13),
-                    ),
-                  ),
-                ),
-
-              const SizedBox(height: 32),
-
-              // Large Log In Button
-              SizedBox(
-                height: 52,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isDark
-                        ? AppColors.terracottaVibrant
-                        : const Color(0xFF6E5600),
-                    foregroundColor: Colors.white,
-                    elevation: 2,
-                    shadowColor: (isDark
-                            ? AppColors.terracottaVibrant
-                            : const Color(0xFF6E5600))
-                        .withValues(alpha: 0.3),
-                    shape: RoundedRectangleBorder(
+                          ? const Color(0xFF451A1A)
+                          : const Color(0xFFFEF2F2),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark
+                            ? const Color(0xFFB91C1C)
+                            : const Color(0xFFFCA5A5),
+                      ),
                     ),
-                  ),
-                  onPressed: _isLoading ? null : _login,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : Text(
-                          l10n.loginLoginButton,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 0.2,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline_rounded,
+                            size: 18, color: Color(0xFFEF4444)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _error!,
+                            style: TextStyle(
+                              color: isDark
+                                  ? const Color(0xFFFCA5A5)
+                                  : const Color(0xFFDC2626),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
+                      ],
+                    ),
+                  ),
                 ),
+
+              const SizedBox(height: 28),
+
+              // Neumorphic Primary Login Button
+              NeumorphicButton(
+                text: l10n.loginLoginButton,
+                isLoading: _isLoading,
+                height: 52,
+                accentColor: NeumorphicColors.brandPrimary,
+                onPressed: _isLoading ? null : _login,
               ),
 
               const SizedBox(height: 24),
 
-              // Bottom Link: Don't have an account? Create one now
+              // Bottom Link: Don't have an account? Sign Up
               Center(
                 child: GestureDetector(
                   onTap: () {
@@ -588,14 +418,14 @@ class _LoginPageState extends State<LoginPage> {
                     }
                   },
                   child: Padding(
-                    padding: const EdgeInsets.all(8.0),
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
                     child: Text(
                       l10n.loginNoAccount,
                       style: TextStyle(
                         color: isDark
-                            ? AppColors.goldVibrant
-                            : const Color(0xFF6E5600),
-                        fontWeight: FontWeight.bold,
+                            ? NeumorphicColors.brandAmber
+                            : NeumorphicColors.brandPrimary,
+                        fontWeight: FontWeight.w700,
                         fontSize: 14,
                       ),
                       textAlign: TextAlign.center,
@@ -603,7 +433,20 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 28),
+
+              // Footer: Copyright
+              Text(
+                '© 2026 Sakay Ta. All rights reserved.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: NeumorphicColors.subtext(isDark),
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 0.2,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
@@ -611,46 +454,51 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  Widget _buildThemeToggle(BuildContext context, bool isDark, AppState app) {
-    return Tooltip(
-      message: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => app.setDarkMode(!isDark),
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? AppColors.darkCardElevated
-                  : const Color(0xFFF1F5F9),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isDark
-                    ? AppColors.darkBorder
-                    : const Color(0xFFCBD5E1),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Icon(
-                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                size: 20,
-                color: isDark ? AppColors.goldVibrant : const Color(0xFF1E2B45),
-              ),
-            ),
+  Widget _buildRoleOption({
+    required String label,
+    required bool isSelected,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: isSelected
+            ? NeumorphicDecorations.raised(
+                isDark: isDark,
+                radius: 18,
+                color: isDark ? const Color(0xFF26334D) : Colors.white,
+                distance: 2.0,
+                blur: 5.0,
+              )
+            : const BoxDecoration(color: Colors.transparent),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+            color: isSelected
+                ? (isDark
+                    ? NeumorphicColors.brandAmber
+                    : NeumorphicColors.brandPrimary)
+                : NeumorphicColors.textSecondary(isDark),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildThemeToggle(BuildContext context, bool isDark, AppState app) {
+    return NeumorphicIconButton(
+      icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+      iconColor:
+          isDark ? NeumorphicColors.brandAmber : NeumorphicColors.brandNavy,
+      size: 40,
+      iconSize: 20,
+      tooltip: isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode',
+      onTap: () => app.setDarkMode(!isDark),
     );
   }
 }

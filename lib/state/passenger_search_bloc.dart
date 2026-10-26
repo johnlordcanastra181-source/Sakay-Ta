@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint, debugPrintStack;
 import 'package:geolocator/geolocator.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../core/constants.dart';
+import '../core/logger.dart';
 import '../core/time_utils.dart';
 import '../services/driver_matching_service.dart';
 import '../services/osm_map_service.dart';
@@ -11,8 +14,36 @@ import '../services/payment_service.dart';
 import '../services/weather_service.dart';
 import 'app_state.dart';
 
+/// Road-winding factor applied to straight-line distance when the OSRM road
+/// router is unreachable (weak/no mobile data). Rural Philippine roads are
+/// typically 20-35% longer than the crow-flies distance.
+const double kApproximateRoadFactor = 1.25;
+
+/// Builds an approximate route when OSRM cannot be reached so the passenger
+/// can still see a fare and book. Returns null for invalid/zero-length trips.
+RouteDetails? approximateRoute(Geo origin, Geo destination) {
+  if (origin.lat == 0 && origin.lng == 0) return null;
+  if (destination.lat == 0 && destination.lng == 0) return null;
+  final straight = Geo.distanceKm(origin, destination);
+  if (!straight.isFinite || straight <= 0.01) return null;
+  final km = double.parse((straight * kApproximateRoadFactor).toStringAsFixed(2));
+  // ~25 km/h average tricycle / habal-habal speed on rural roads.
+  final mins = (km / 25 * 60).ceil().clamp(1, 240);
+  return RouteDetails(
+    distanceKm: km,
+    durationMins: mins,
+    polylinePoints: [origin, destination],
+    source: 'Approximate (offline)',
+  );
+}
+
 // --- EVENTS ---
 abstract class PassengerSearchEvent {}
+
+class DismissRecentDestinationEvent extends PassengerSearchEvent {
+  final Place destination;
+  DismissRecentDestinationEvent(this.destination);
+}
 
 class DetectLocationEvent extends PassengerSearchEvent {
   final bool forceRecenter;
@@ -282,14 +313,54 @@ class PassengerSearchBloc {
     });
   }
 
-  void _syncHistoryUser() {
+  final Set<String> _dismissedDestinationKeys = {};
+
+  bool _isPlaceDismissed(String name, Geo geo) {
+    final normName = name.toLowerCase().trim();
+    if (_dismissedDestinationKeys.contains(normName)) return true;
+    final coordKey =
+        '${geo.lat.toStringAsFixed(4)},${geo.lng.toStringAsFixed(4)}';
+    if (_dismissedDestinationKeys.contains(coordKey)) return true;
+    final combinedKey = '$normName|$coordKey';
+    return _dismissedDestinationKeys.contains(combinedKey);
+  }
+
+  Future<void> _loadDismissedDestinations(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list = prefs.getStringList(
+              'passenger_dismissed_recent_destinations_$userId') ??
+          [];
+      _dismissedDestinationKeys.addAll(list);
+    } catch (e) {
+      debugPrint('Error loading dismissed recent destinations: $e');
+    }
+  }
+
+  void _saveDismissedDestinations(String userId) {
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setStringList(
+        'passenger_dismissed_recent_destinations_$userId',
+        _dismissedDestinationKeys.toList(),
+      );
+    }).catchError((e) {
+      debugPrint('Error saving dismissed recent destinations: $e');
+    });
+  }
+
+  void _syncHistoryUser() async {
     final user = AppState.instance.currentUser;
     final userId = user?.isPassenger == true ? user!.id : null;
     if (userId == _historyUserId) return;
     _historyUserId = userId;
     _historySub?.cancel();
+    _dismissedDestinationKeys.clear();
     _emit(_state.copyWith(recentDestinations: const []));
     if (userId == null) return;
+
+    await _loadDismissedDestinations(userId);
+    if (_historyUserId != userId) return;
+
     _historySub = AppState.instance.rideHistoryStream().listen((entries) {
       if (_historyUserId != userId) return;
       final sorted = entries
@@ -303,6 +374,7 @@ class PassengerSearchBloc {
       for (final trip in sorted) {
         final name = trip.dropoffAddress.trim();
         if (name.isEmpty) continue;
+        if (_isPlaceDismissed(name, trip.dropoff)) continue;
         final key =
             '${trip.dropoff.lat.toStringAsFixed(5)},${trip.dropoff.lng.toStringAsFixed(5)}';
         if (seen.add(key)) places.add(Place(name, trip.dropoff, name));
@@ -343,6 +415,8 @@ class PassengerSearchBloc {
       _handleExportMap();
     } else if (event is ShareTripEvent) {
       _handleShareTrip();
+    } else if (event is DismissRecentDestinationEvent) {
+      _handleDismissRecentDestination(event.destination);
     }
   }
 
@@ -411,7 +485,11 @@ class PassengerSearchBloc {
           '${detectedLoc.lat.toStringAsFixed(5)}, ${detectedLoc.lng.toStringAsFixed(5)}',
     ));
     _isDetectingLocation = false;
-    unawaited(_resolvePickupAddress(detectedLoc));
+    unawaited(_resolvePickupAddress(detectedLoc)
+        .catchError((Object e, StackTrace s) {
+      AppLogger.debug('PassengerSearchBloc: _resolvePickupAddress note ($e)',
+          error: e, stackTrace: s);
+    }));
   }
 
   Future<Position?> _currentPositionWithRetry() async {
@@ -495,7 +573,7 @@ class PassengerSearchBloc {
     try {
       const locationSettings = LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 5, // update every 5 meters
+        distanceFilter: 15, // update every 15 meters for optimal low-end battery & CPU
       );
 
       _positionStreamSub = Geolocator.getPositionStream(
@@ -516,7 +594,7 @@ class PassengerSearchBloc {
 
   Future<void> _handleLocationUpdated(Geo newLocation) async {
     final diff = Geo.distanceKm(_state.passengerLocation, newLocation);
-    if (diff < 0.003) return;
+    if (diff < 0.015) return;
     _startDriverSubscription(
         newLocation, _state.searchRadiusKm, _state.selectedVehicle);
 
@@ -631,7 +709,10 @@ class PassengerSearchBloc {
         try {
           updatedSelected = drivers.firstWhere((d) => d.canSubmitRideRequest);
           selectedStillVisible = true;
-        } catch (_) {}
+        } catch (e, s) {
+          AppLogger.debug('PassengerSearchBloc non-fatal note: $e',
+              error: e, stackTrace: s);
+        }
       }
       final bookableCount =
           drivers.where((driver) => driver.canSubmitRideRequest).length;
@@ -808,15 +889,28 @@ class PassengerSearchBloc {
     }
 
     if (route.length < 2 || dist <= 0) {
-      _emit(_state.copyWith(
-          isRouting: false,
-          routePoints: const [],
-          routeDistanceKm: 0,
-          routeDurationMins: 0,
-          errorMessage:
-              'Road route unavailable. Please try again when connected.'));
-      return;
+      // Weak signal / OSRM timeout: never block booking. Approximate the road
+      // distance from the straight-line distance (rural road winding factor)
+      // and draw a direct line so the passenger still gets a fare.
+      final fallback = approximateRoute(origin, destGeo);
+      if (fallback == null) {
+        _emit(_state.copyWith(
+            isRouting: false,
+            routePoints: const [],
+            routeDistanceKm: 0,
+            routeDurationMins: 0,
+            errorMessage:
+                'Road route unavailable. Please try again when connected.'));
+        return;
+      }
+      debugPrint('SakayTa: OSRM unavailable - using approximate route '
+          '(${fallback.distanceKm.toStringAsFixed(2)} km)');
+      dist = fallback.distanceKm;
+      duration = fallback.durationMins;
+      route = fallback.polylinePoints;
     }
+
+    dist = double.parse(dist.toStringAsFixed(1));
 
     final trikFare = matchingService.calculateFare(
         vehicleType: VehicleType.tricycle, distanceKm: dist);
@@ -836,6 +930,21 @@ class PassengerSearchBloc {
       habalFare: habalFare,
       selectedDriver: bestMatch,
     ));
+  }
+
+  /// Dynamically re-evaluates active route fares when admin rates update.
+  void recomputeFares() {
+    if (_state.routeDistanceKm > 0) {
+      final dist = double.parse(_state.routeDistanceKm.toStringAsFixed(1));
+      final trikFare = matchingService.calculateFare(
+          vehicleType: VehicleType.tricycle, distanceKm: dist);
+      final habalFare = matchingService.calculateFare(
+          vehicleType: VehicleType.habal, distanceKm: dist);
+      _emit(_state.copyWith(
+        tricycleFare: trikFare,
+        habalFare: habalFare,
+      ));
+    }
   }
 
   void _handleClearDestination() {
@@ -889,7 +998,14 @@ class PassengerSearchBloc {
   }
 
   void _handleConfirmBooking() {
-    unawaited(confirmSelectedBooking());
+    unawaited(confirmSelectedBooking().catchError((Object e, StackTrace s) {
+      AppLogger.warn('PassengerSearchBloc: confirmSelectedBooking error ($e)',
+          error: e, stackTrace: s);
+      _emit(_state.copyWith(
+        errorMessage: 'Unable to submit booking. Please try again.',
+      ));
+      return false;
+    }));
   }
 
   Future<bool> confirmSelectedBooking({String? paymentMethod}) async {
@@ -940,6 +1056,9 @@ class PassengerSearchBloc {
         estimatedFare: _state.selectedVehicle == VehicleType.tricycle
             ? _state.tricycleFare
             : _state.habalFare,
+        distanceKm: _state.routeDistanceKm > 0 ? _state.routeDistanceKm : null,
+        durationMin:
+            _state.routeDurationMins > 0 ? _state.routeDurationMins : null,
       );
       if (trip == null) {
         _emit(_state.copyWith(
@@ -991,6 +1110,27 @@ class PassengerSearchBloc {
     final link =
         'https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lng}#map=16/${location.lat}/${location.lng}';
     _emit(_state.copyWith(shareTripLink: link));
+  }
+
+  void _handleDismissRecentDestination(Place destination) {
+    final normName = destination.name.toLowerCase().trim();
+    final coordKey =
+        '${destination.geo.lat.toStringAsFixed(4)},${destination.geo.lng.toStringAsFixed(4)}';
+    final combinedKey = '$normName|$coordKey';
+
+    _dismissedDestinationKeys.add(normName);
+    _dismissedDestinationKeys.add(coordKey);
+    _dismissedDestinationKeys.add(combinedKey);
+
+    final updated = _state.recentDestinations
+        .where((p) => !_isPlaceDismissed(p.name, p.geo))
+        .toList();
+    _emit(_state.copyWith(recentDestinations: updated));
+
+    final userId = _historyUserId;
+    if (userId != null) {
+      _saveDismissedDestinations(userId);
+    }
   }
 
   void dispose() {

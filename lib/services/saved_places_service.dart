@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/saved_place.dart';
+import 'supabase_database_service.dart';
 import 'supabase_service.dart';
 
 class SavedPlacesService extends ChangeNotifier {
@@ -16,13 +17,39 @@ class SavedPlacesService extends ChangeNotifier {
   List<SavedPlace> get places => List.unmodifiable(_places);
 
   String get summary {
-    if (_places.isEmpty) return 'No saved places';
+    if (_places.isEmpty) return 'No saved places yet';
+    if (_places.length == 1) {
+      final p = _places.first;
+      return '${p.name} · ${p.address}';
+    }
     final names = _places.map((p) => p.name).take(3).join(', ');
-    return names.isNotEmpty ? names : 'No saved places';
+    return '$names (${_places.length} saved places)';
   }
 
   Future<void> init(String? userId) async {
     await _loadFromStorage(userId);
+    if (userId != null && userId.isNotEmpty && SupabaseDatabaseService.isConfigured) {
+      await _syncWithRemote(userId);
+    }
+  }
+
+  Future<void> _syncWithRemote(String userId) async {
+    try {
+      final remotePlaces =
+          await SupabaseDatabaseService.instance.getSavedPlaces(userId);
+      if (remotePlaces.isNotEmpty) {
+        _places = remotePlaces;
+        await _saveToStorageOnly(userId);
+      } else if (_places.isNotEmpty) {
+        // Upload any existing local places to Supabase
+        for (final place in _places) {
+          await SupabaseDatabaseService.instance.saveSavedPlace(place);
+        }
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('SavedPlacesService: remote sync error: $e');
+    }
   }
 
   Future<void> _loadFromStorage(String? userId) async {
@@ -49,7 +76,7 @@ class SavedPlacesService extends ChangeNotifier {
                 !(p.id == 'place_work_default' &&
                     p.address == 'Cebu IT Park, Lahug, Cebu City'))
             .toList();
-        if (_places.length != stored.length) await _saveToStorage(userId);
+        if (_places.length != stored.length) await _saveToStorageOnly(userId);
       }
     } catch (e) {
       debugPrint('SavedPlacesService: load error $e');
@@ -57,7 +84,7 @@ class SavedPlacesService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _saveToStorage(String? userId) async {
+  Future<void> _saveToStorageOnly(String? userId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final key =
@@ -65,7 +92,7 @@ class SavedPlacesService extends ChangeNotifier {
       final raw = jsonEncode(_places.map((p) => p.toMap()).toList());
       await prefs.setString(key, raw);
 
-      // Also mirror formatted addresses to Firestore passenger profile
+      // Also mirror formatted addresses to passenger profile if available
       if (userId != null && SupabaseService.isConfigured) {
         final addressStrings =
             _places.map((p) => '${p.name}: ${p.address}').toList();
@@ -83,8 +110,16 @@ class SavedPlacesService extends ChangeNotifier {
 
   Future<void> addPlace(String userId, SavedPlace place) async {
     _places.removeWhere((p) => p.id == place.id);
-    _places.add(place);
-    await _saveToStorage(userId);
+    _places.insert(0, place);
+    await _saveToStorageOnly(userId);
+
+    if (userId.isNotEmpty && SupabaseDatabaseService.isConfigured) {
+      try {
+        await SupabaseDatabaseService.instance.saveSavedPlace(place);
+      } catch (e) {
+        debugPrint('SavedPlacesService: remote add error: $e');
+      }
+    }
   }
 
   Future<void> updatePlace(String userId, SavedPlace place) async {
@@ -92,13 +127,29 @@ class SavedPlacesService extends ChangeNotifier {
     if (idx != -1) {
       _places[idx] = place;
     } else {
-      _places.add(place);
+      _places.insert(0, place);
     }
-    await _saveToStorage(userId);
+    await _saveToStorageOnly(userId);
+
+    if (userId.isNotEmpty && SupabaseDatabaseService.isConfigured) {
+      try {
+        await SupabaseDatabaseService.instance.saveSavedPlace(place);
+      } catch (e) {
+        debugPrint('SavedPlacesService: remote update error: $e');
+      }
+    }
   }
 
   Future<void> deletePlace(String userId, String placeId) async {
     _places.removeWhere((p) => p.id == placeId);
-    await _saveToStorage(userId);
+    await _saveToStorageOnly(userId);
+
+    if (userId.isNotEmpty && SupabaseDatabaseService.isConfigured) {
+      try {
+        await SupabaseDatabaseService.instance.deleteSavedPlace(userId, placeId);
+      } catch (e) {
+        debugPrint('SavedPlacesService: remote delete error: $e');
+      }
+    }
   }
 }

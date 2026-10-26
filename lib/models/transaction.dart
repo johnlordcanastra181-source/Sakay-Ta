@@ -127,7 +127,7 @@ class Review {
         driverId: map['driver_id'] as String,
         passengerId: map['passenger_id'] as String,
         passengerName: (map['passenger_name'] as String?) ?? '',
-        rating: (map['rating'] as int?) ?? 5,
+        rating: (map['rating'] as int?) ?? 0,
         comment: (map['comment'] as String?) ?? '',
         createdAt: DateTime.fromMillisecondsSinceEpoch(
           (map['created_at'] as int?) ?? 0,

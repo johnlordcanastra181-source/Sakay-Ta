@@ -521,10 +521,27 @@ class PSGCData {
     return results;
   }
 
-  /// Returns sorted list of all official barangays for a given city/municipality.
-  static List<PSGCItem> getBarangaysForCity(String cityCode) {
-    if (_barangaysByCityCache.containsKey(cityCode)) {
-      return _barangaysByCityCache[cityCode]!;
+  /// Returns sorted list of all official barangays for a given city/municipality,
+  /// strictly scoped to the parent province to prevent cross-province barangay leakage.
+  static List<PSGCItem> getBarangaysForCity(String cityCode, [String? provinceCode]) {
+    // 1. Resolve effective province code
+    final explicitProv = provinceCode?.trim();
+    final inferredProv = (explicitProv != null && explicitProv.isNotEmpty)
+        ? explicitProv
+        : (cityCode.contains('_') ? cityCode.split('_').first : null);
+
+    // Validate against known province codes
+    final effectiveProvCode = (inferredProv != null &&
+            provinces.any((p) => p.code == inferredProv))
+        ? inferredProv
+        : null;
+
+    final cacheKey = effectiveProvCode != null
+        ? '${effectiveProvCode}_$cityCode'
+        : cityCode;
+
+    if (_barangaysByCityCache.containsKey(cacheKey)) {
+      return _barangaysByCityCache[cacheKey]!;
     }
 
     final rawCityName = cityCode.contains('_')
@@ -532,30 +549,74 @@ class PSGCData {
         : cityCode;
     final normCity = _normalize(rawCityName);
 
+    // Resolve normalized province name if province code is known
+    String? normProv;
+    if (effectiveProvCode != null) {
+      final provItem = provinces.cast<PSGCItem?>().firstWhere(
+            (p) => p?.code == effectiveProvCode,
+            orElse: () => null,
+          );
+      final provName = provItem?.name ?? effectiveProvCode;
+      normProv = _normalize(provName);
+    }
+
+    bool isProvMatch(String curNormProv) {
+      if (normProv == null) return true;
+      return curNormProv == normProv ||
+          curNormProv.contains(normProv) ||
+          normProv.contains(curNormProv) ||
+          (normProv.contains('ncr') && curNormProv.contains('manila')) ||
+          (normProv.contains('metromanila') && curNormProv.contains('ncr')) ||
+          (normProv.contains('davaodeoro') &&
+              curNormProv.contains('compostela')) ||
+          (normProv.contains('cotabato') && curNormProv.contains('cotabato'));
+    }
+
     final Set<String> seenBrgyNames = {};
     final List<PSGCItem> results = [];
 
-    // 1. Check if it matches major city barangays directly
+    // 1. Check if it matches major city barangays directly (only if province is null or matches)
     if (_majorCityBarangays.containsKey(normCity)) {
-      for (final brgy in _majorCityBarangays[normCity]!) {
-        final formattedBrgy = _toTitleCase(brgy);
-        final norm = _normalize(formattedBrgy);
-        if (!seenBrgyNames.contains(norm)) {
-          seenBrgyNames.add(norm);
-          results.add(
-            PSGCItem(
-              code: _sanitizeCode(cityCode, brgy),
-              name: formattedBrgy,
-              parentCode: cityCode,
-            ),
-          );
+      final isMajorAllowed = normProv == null ||
+          (normCity == 'cebucity' && normProv.contains('cebu')) ||
+          (normCity == 'davaocity' && normProv.contains('davao')) ||
+          (normCity == 'iloilocity' && normProv.contains('iloilo')) ||
+          (normCity == 'bacolodcity' && normProv.contains('negros')) ||
+          (const [
+            'quezoncity',
+            'manila',
+            'makaticity',
+            'taguigcity',
+            'pasigcity'
+          ].contains(normCity) &&
+              (normProv.contains('ncr') || normProv.contains('manila')));
+
+      if (isMajorAllowed) {
+        for (final brgy in _majorCityBarangays[normCity]!) {
+          final formattedBrgy = _toTitleCase(brgy);
+          final norm = _normalize(formattedBrgy);
+          if (!seenBrgyNames.contains(norm)) {
+            seenBrgyNames.add(norm);
+            results.add(
+              PSGCItem(
+                code: _sanitizeCode(cityCode, brgy),
+                name: formattedBrgy,
+                parentCode: cityCode,
+              ),
+            );
+          }
         }
       }
     }
 
-    // 2. Search full philippineRegions dataset for matching municipality/city
+    // 2. Search rpcmb.philippineRegions dataset strictly scoped to matching province
     for (final reg in rpcmb.philippineRegions) {
       for (final prov in reg.provinces) {
+        final curNormProv = _normalize(prov.name);
+        if (normProv != null && !isProvMatch(curNormProv)) {
+          continue; // Strict: NEVER include municipalities from other provinces
+        }
+
         for (final mun in prov.municipalities) {
           final curNormMun = _normalize(mun.name);
           final isMatch = curNormMun == normCity ||
@@ -578,6 +639,9 @@ class PSGCData {
                   ),
                 );
               }
+            }
+            if (curNormMun == normCity && normProv != null) {
+              break;
             }
           }
         }
@@ -616,7 +680,7 @@ class PSGCData {
     }
 
     results.sort((a, b) => a.name.compareTo(b.name));
-    _barangaysByCityCache[cityCode] = results;
+    _barangaysByCityCache[cacheKey] = results;
     return results;
   }
 

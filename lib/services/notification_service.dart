@@ -1,5 +1,6 @@
 import 'package:uuid/uuid.dart';
 
+import '../core/logger.dart';
 import '../models/transaction.dart';
 import 'database_service.dart';
 
@@ -37,7 +38,10 @@ class NotificationService {
         'is_read': notification.read ? 1 : 0,
         'created_at': notification.createdAt.millisecondsSinceEpoch,
       });
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('NotificationService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
   }
 
   Future<List<AppNotification>> listFor(String userId) async {
@@ -88,6 +92,9 @@ class NotificationService {
         where: 'user_id = ?',
         whereArgs: [userId],
       );
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.debug('NotificationService non-fatal note: $e',
+          error: e, stackTrace: s);
+    }
   }
 }

@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/services.dart';
 
 import '../services/password_change_service.dart';
 
@@ -29,9 +29,7 @@ class _PasswordChangePageState extends State<PasswordChangePage> {
   String? _error;
   String? _info;
 
-  String get _email =>
-      Supabase.instance.client.auth.currentUser?.email?.trim().toLowerCase() ??
-      '';
+  String get _email => PasswordChangeService.currentUserEmail;
 
   @override
   void dispose() {
@@ -44,13 +42,15 @@ class _PasswordChangePageState extends State<PasswordChangePage> {
 
   Future<void> _requestCode() async {
     if (_busy || _cooldown > 0) return;
+    final previousCode = _codeController.text;
+    _codeController.clear();
     setState(() {
       _busy = true;
       _error = null;
       _info = null;
     });
     try {
-      await PasswordChangeService.requestOtp();
+      await PasswordChangeService.requestOtp(previousCode: previousCode);
       if (!mounted) return;
       setState(() {
         _requested = true;
@@ -83,10 +83,15 @@ class _PasswordChangePageState extends State<PasswordChangePage> {
 
   Future<void> _update() async {
     if (_busy) return;
+    final code = _codeController.text.trim();
     final password = _passwordController.text;
     final confirmation = _confirmController.text;
     if (!_requested) {
       setState(() => _error = 'Request a verification code first.');
+      return;
+    }
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      setState(() => _error = 'Enter the 6-digit verification code.');
       return;
     }
     if (password.length < 6) {
@@ -107,12 +112,13 @@ class _PasswordChangePageState extends State<PasswordChangePage> {
     try {
       await PasswordChangeService.verifyAndUpdate(
         email: _email,
-        code: _codeController.text,
+        code: code,
         newPassword: password,
       );
       if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger?.showSnackBar(
         const SnackBar(
           backgroundColor: Color(0xFF059669),
           content: Text('Password updated successfully.'),
@@ -125,10 +131,8 @@ class _PasswordChangePageState extends State<PasswordChangePage> {
     }
   }
 
-  String _message(Object error) => error
-      .toString()
-      .replaceFirst('StateError: ', '')
-      .replaceFirst('Invalid argument(s): ', '');
+  String _message(Object error) =>
+      PasswordChangeService.formatErrorMessage(error);
 
   @override
   Widget build(BuildContext context) {
@@ -186,6 +190,9 @@ class _PasswordChangePageState extends State<PasswordChangePage> {
                           controller: _codeController,
                           enabled: !_busy,
                           keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           maxLength: 6,
                           decoration: const InputDecoration(
                             labelText: 'Verification Code',

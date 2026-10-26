@@ -7,9 +7,11 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:uuid/uuid.dart';
 import '../core/constants.dart';
+import '../core/neumorphic_theme.dart';
 import '../core/theme.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart' hide Brand, Avatar;
+import '../widgets/neumorphic_widgets.dart';
 import '../models/driver_application_rules.dart';
 import '../models/driver_profile.dart';
 import '../models/philippine_address.dart';
@@ -712,10 +714,11 @@ class _DriverRegistrationState extends State<DriverRegistration> {
                 children: [
                   Row(
                     children: [
-                      IconButton(
-                        icon: Icon(Icons.arrow_back_ios_new_rounded,
-                            size: 18, color: AppColors.textColor(isDark)),
-                        onPressed: () {
+                      NeumorphicIconButton(
+                        icon: Icons.arrow_back_ios_new_rounded,
+                        size: 40,
+                        iconSize: 18,
+                        onTap: () {
                           if (_currentStep > 0) {
                             setState(() => _currentStep--);
                           } else {
@@ -723,6 +726,7 @@ class _DriverRegistrationState extends State<DriverRegistration> {
                           }
                         },
                       ),
+                      const SizedBox(width: 8),
                       Brand(dark: isDark),
                     ],
                   ),
@@ -756,15 +760,8 @@ class _DriverRegistrationState extends State<DriverRegistration> {
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? AppColors.darkCardElevated
-                                : const Color(0xFFF7EBC6),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                                color: isDark
-                                    ? AppColors.darkBorder
-                                    : const Color(0xFFD4A373)),
+                          decoration: NeumorphicDecorations.pill(
+                            isDark: isDark,
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
@@ -943,47 +940,15 @@ class _DriverRegistrationState extends State<DriverRegistration> {
                     const SizedBox(height: 28),
 
                     // Action Button matching screenshot "Next: License Details →"
-                    SizedBox(
+                    NeumorphicButton(
+                      text: _getButtonText(l10n),
+                      icon: Icons.arrow_forward_rounded,
+                      isLoading: _isLoading,
+                      accentColor: isDark
+                          ? AppColors.terracottaVibrant
+                          : const Color(0xFFE65100),
                       height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isDark
-                              ? AppColors.terracottaVibrant
-                              : const Color(0xFF6E5600),
-                          foregroundColor: Colors.white,
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        onPressed: _isLoading ? null : _handleNext,
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
-                            : Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    _getButtonText(l10n),
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Icon(Icons.arrow_forward_rounded,
-                                      color: Colors.white, size: 20),
-                                ],
-                              ),
-                      ),
+                      onPressed: _isLoading ? null : _handleNext,
                     ),
                     const SizedBox(height: 24),
                   ],
@@ -1033,57 +998,99 @@ class _DriverRegistrationState extends State<DriverRegistration> {
                   if (index > 0)
                     Expanded(
                       child: Container(
-                        height: 2,
-                        color: index <= _currentStep
-                            ? (isDark
-                                ? AppColors.goldVibrant
-                                : const Color(0xFF6E5600))
-                            : (isDark
-                                ? AppColors.darkBorder
-                                : const Color(0xFFE0E0E0)),
-                      ),
-                    ),
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: isCurrent || isCompleted
-                          ? (isDark
-                              ? AppColors.goldVibrant
-                              : const Color(0xFF6E5600))
-                          : (isDark
-                              ? AppColors.darkCardElevated
-                              : const Color(0xFFEFEFEF)),
-                    ),
-                    child: Center(
-                      child: Text(
-                        step['num']!,
-                        style: TextStyle(
-                          color: isCurrent || isCompleted
+                        height: 3,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          color: index <= _currentStep
                               ? (isDark
-                                  ? const Color(0xFF0F172A)
-                                  : Colors.white)
+                                  ? AppColors.goldVibrant
+                                  : const Color(0xFFE65100))
                               : (isDark
-                                  ? AppColors.darkTextSecondary
-                                  : const Color(0xFF808080)),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                                  ? AppColors.darkBorder
+                                  : const Color(0xFFDDE3ED)),
                         ),
                       ),
                     ),
-                  ),
+                  if (isCompleted)
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF10B981), Color(0xFF059669)],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.35),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.check_rounded, color: Colors.white, size: 18),
+                      ),
+                    )
+                  else if (isCurrent)
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: NeumorphicColors.brandGradient,
+                        boxShadow: [
+                          BoxShadow(
+                            color: NeumorphicColors.brandPrimary.withValues(alpha: 0.4),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          step['num']!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: NeumorphicDecorations.inset(
+                        isDark: isDark,
+                        radius: 16,
+                      ),
+                      child: Center(
+                        child: Text(
+                          step['num']!,
+                          style: TextStyle(
+                            color: NeumorphicColors.textSecondary(isDark),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
                   if (index < 3)
                     Expanded(
                       child: Container(
-                        height: 2,
-                        color: index < _currentStep
-                            ? (isDark
-                                ? AppColors.goldVibrant
-                                : const Color(0xFF6E5600))
-                            : (isDark
-                                ? AppColors.darkBorder
-                                : const Color(0xFFE0E0E0)),
+                        height: 3,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(2),
+                          color: index < _currentStep
+                              ? (isDark
+                                  ? AppColors.goldVibrant
+                                  : const Color(0xFFE65100))
+                              : (isDark
+                                  ? AppColors.darkBorder
+                                  : const Color(0xFFDDE3ED)),
+                        ),
                       ),
                     ),
                 ],
@@ -1268,6 +1275,9 @@ class _DriverRegistrationState extends State<DriverRegistration> {
             obscureText: !_showPassword,
             isDark: isDark,
             suffixIcon: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              splashRadius: 20,
               icon: Icon(
                 _showPassword
                     ? Icons.visibility_off_outlined
@@ -1296,6 +1306,9 @@ class _DriverRegistrationState extends State<DriverRegistration> {
             obscureText: !_showConfirmPassword,
             isDark: isDark,
             suffixIcon: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+              splashRadius: 20,
               icon: Icon(
                 _showConfirmPassword
                     ? Icons.visibility_off_outlined
@@ -1728,13 +1741,9 @@ class _DriverRegistrationState extends State<DriverRegistration> {
           const SizedBox(height: 16),
           if (_vehicleType == VehicleType.tricycle)
             // TODA options are loaded from the Admin-managed Supabase table.
-            Container(
+            NeumorphicCard(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardColor(isDark),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderColor(isDark)),
-              ),
+              radius: 14,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -1792,7 +1801,9 @@ class _DriverRegistrationState extends State<DriverRegistration> {
                   DropdownButtonFormField<String>(
                     initialValue: _selectedToda.isEmpty ? null : _selectedToda,
                     isExpanded: true,
-                    dropdownColor: AppColors.cardColor(isDark),
+                    dropdownColor: isDark
+                        ? AppColors.darkCardElevated
+                        : Colors.white,
                     style: TextStyle(
                       color: AppColors.textColor(isDark),
                       fontSize: 14,
@@ -1925,27 +1936,33 @@ class _DriverRegistrationState extends State<DriverRegistration> {
     VoidCallback onTap,
     bool isDark,
   ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor(isDark),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isUploaded
-              ? (isDark ? AppColors.emeraldVibrant : const Color(0xFF2D6A4F))
-              : AppColors.borderColor(isDark),
-        ),
-      ),
+    final uploadColor = isUploaded
+        ? (isDark ? AppColors.emeraldVibrant : const Color(0xFF2D6A4F))
+        : NeumorphicColors.brandPrimary;
+    return NeumorphicCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      radius: 14,
+      border: isUploaded
+          ? Border.all(
+              color: uploadColor.withValues(alpha: 0.4),
+              width: 1.5,
+            )
+          : null,
       child: Row(
         children: [
-          Icon(
-            isUploaded
-                ? Icons.check_circle_rounded
-                : Icons.cloud_upload_outlined,
-            color: isUploaded
-                ? (isDark ? AppColors.emeraldVibrant : const Color(0xFF2D6A4F))
-                : (isDark ? AppColors.goldVibrant : const Color(0xFF6E5600)),
-            size: 28,
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: uploadColor.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isUploaded
+                  ? Icons.check_circle_rounded
+                  : Icons.cloud_upload_outlined,
+              color: uploadColor,
+              size: 24,
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -1966,9 +1983,7 @@ class _DriverRegistrationState extends State<DriverRegistration> {
                   style: TextStyle(
                     fontSize: 12,
                     color: isUploaded
-                        ? (isDark
-                            ? AppColors.emeraldVibrant
-                            : const Color(0xFF2D6A4F))
+                        ? uploadColor
                         : AppColors.subtextColor(isDark),
                   ),
                 ),
@@ -1998,32 +2013,40 @@ class _DriverRegistrationState extends State<DriverRegistration> {
     Widget? suffixIcon,
     required bool isDark,
   }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      maxLines: maxLines,
-      maxLength: maxLength,
-      obscureText: obscureText,
-      style: TextStyle(fontSize: 14, color: AppColors.textColor(isDark)),
-      decoration: InputDecoration(
-        hintText: hint,
-        counterText: maxLength == null ? null : '',
-        suffixIcon: suffixIcon,
-        hintStyle: TextStyle(
-          color: AppColors.subtextColor(isDark),
-          fontSize: 14,
-        ),
-        filled: true,
-        fillColor: AppColors.inputBgColor(isDark),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppColors.borderColor(isDark)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppColors.borderColor(isDark)),
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: NeumorphicDecorations.inset(
+        isDark: isDark,
+        radius: 12,
+      ),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        maxLines: maxLines,
+        maxLength: maxLength,
+        obscureText: obscureText,
+        style: TextStyle(fontSize: 14, color: AppColors.textColor(isDark)),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: false,
+          fillColor: Colors.transparent,
+          hintText: hint,
+          counterText: maxLength == null ? null : '',
+          suffixIcon: suffixIcon,
+          suffixIconConstraints:
+              const BoxConstraints(minWidth: 40, minHeight: 40),
+          hintStyle: TextStyle(
+            color: AppColors.subtextColor(isDark),
+            fontSize: 14,
+          ),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         ),
       ),
     );
@@ -2038,48 +2061,44 @@ class _DriverRegistrationState extends State<DriverRegistration> {
     required VoidCallback onTap,
   }) {
     final activeColor =
-        isDark ? AppColors.terracottaVibrant : const Color(0xFF6E5600);
-    return InkWell(
+        isDark ? AppColors.terracottaVibrant : const Color(0xFFE65100);
+    return NeumorphicCard(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? activeColor.withValues(alpha: 0.12)
-              : AppColors.cardElevatedColor(isDark),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? activeColor : AppColors.borderColor(isDark),
-            width: isSelected ? 2.0 : 1.0,
+      radius: 14,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      border: isSelected
+          ? Border.all(color: activeColor, width: 2.0)
+          : null,
+      color: isSelected
+          ? (isDark
+              ? activeColor.withValues(alpha: 0.15)
+              : activeColor.withValues(alpha: 0.08))
+          : null,
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            size: 28,
+            color: isSelected ? activeColor : AppColors.subtextColor(isDark),
           ),
-        ),
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: 28,
-              color: isSelected ? activeColor : AppColors.subtextColor(isDark),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: isSelected ? activeColor : AppColors.textColor(isDark),
             ),
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: isSelected ? activeColor : AppColors.textColor(isDark),
-              ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 11,
+              color: AppColors.subtextColor(isDark),
             ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 11,
-                color: AppColors.subtextColor(isDark),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

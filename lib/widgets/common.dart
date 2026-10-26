@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/neumorphic_theme.dart';
 import '../core/theme.dart';
+import 'neumorphic_widgets.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import 'user_avatar.dart';
@@ -105,7 +107,9 @@ class Avatar extends StatelessWidget {
         resolvedPhoto =
             app?.currentUser?.profilePhotoUrl ?? app?.driverProfile?.docProfile;
         resolvedName ??= app?.currentUser?.fullName;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Common widget non-fatal note: $e');
+      }
     }
 
     final imageProvider = getUserAvatarImageProvider(resolvedPhoto);
@@ -166,24 +170,38 @@ class Panel extends StatelessWidget {
     this.color,
     this.padding = const EdgeInsets.all(16),
     this.onTap,
+    this.radius = 16.0,
   });
   final Widget child;
   final Color? color;
   final EdgeInsetsGeometry padding;
   final VoidCallback? onTap;
+  final double radius;
+
   @override
-  Widget build(BuildContext context) => Material(
-        color: color ??
-            (Theme.of(context).brightness == Brightness.dark
-                ? const Color(0xFF1E2724)
-                : Colors.white),
-        borderRadius: BorderRadius.circular(16),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = color ?? NeumorphicColors.surface(isDark);
+
+    Widget box = Container(
+      decoration: NeumorphicDecorations.raised(
+        isDark: isDark,
+        color: cardBg,
+        radius: radius,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(radius),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           child: Padding(padding: padding, child: child),
         ),
-      );
+      ),
+    );
+
+    return box;
+  }
 }
 
 class PrimaryButton extends StatelessWidget {
@@ -198,26 +216,23 @@ class PrimaryButton extends StatelessWidget {
   final VoidCallback onTap;
   final IconData? icon;
   final Color? color;
+
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: 50,
-        width: double.infinity,
-        child: FilledButton.icon(
-          style: FilledButton.styleFrom(
-            backgroundColor: color ?? AppColors.terracotta,
-            foregroundColor: Colors.white,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          onPressed: onTap,
-          icon: icon == null ? const SizedBox.shrink() : Icon(icon, size: 18),
-          label:
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
-        ),
-      );
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      width: double.infinity,
+      child: NeumorphicButton(
+        text: label,
+        icon: icon,
+        accentColor: color ?? NeumorphicColors.brandPrimary,
+        onPressed: onTap,
+      ),
+    );
+  }
 }
 
-class CustomButton extends StatelessWidget {
+class CustomButton extends StatefulWidget {
   const CustomButton({
     super.key,
     required this.text,
@@ -225,10 +240,10 @@ class CustomButton extends StatelessWidget {
     this.isLoading = false,
     this.backgroundColor,
     this.textColor,
-    this.height = 56.0,
-    this.borderRadius = 12.0,
-    this.fontSize = 16.0,
-    this.fontWeight = FontWeight.w600,
+    this.height = 54.0,
+    this.borderRadius = 14.0,
+    this.fontSize = 15.0,
+    this.fontWeight = FontWeight.w700,
   });
 
   final String text;
@@ -242,47 +257,71 @@ class CustomButton extends StatelessWidget {
   final FontWeight fontWeight;
 
   @override
+  State<CustomButton> createState() => _CustomButtonState();
+}
+
+class _CustomButtonState extends State<CustomButton> {
+  bool _isPressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: height,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundColor ?? AppColors.terracotta,
-          foregroundColor: textColor ?? Colors.white,
-          disabledBackgroundColor: Colors.grey.shade400,
-          disabledForegroundColor: Colors.white70,
-          elevation: 2,
-          shadowColor: AppColors.terracotta.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(borderRadius),
+    final primary = widget.backgroundColor ?? NeumorphicColors.brandPrimary;
+    final isDisabled = widget.onPressed == null || widget.isLoading;
+
+    return GestureDetector(
+      onTapDown: isDisabled ? null : (_) => setState(() => _isPressed = true),
+      onTapUp: isDisabled ? null : (_) => setState(() => _isPressed = false),
+      onTapCancel:
+          isDisabled ? null : () => setState(() => _isPressed = false),
+      onTap: isDisabled ? null : widget.onPressed,
+      child: AnimatedScale(
+        scale: _isPressed ? 0.975 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOutCubic,
+        child: Container(
+          width: double.infinity,
+          height: widget.height,
+          decoration: NeumorphicDecorations.accentRaised(
+            color: isDisabled ? Colors.grey.shade400 : primary,
+            gradient: isDisabled
+                ? null
+                : LinearGradient(
+                    colors: [
+                      primary,
+                      widget.backgroundColor ?? const Color(0xFFF59E0B),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+            radius: widget.borderRadius,
+            elevation: _isPressed ? 1.5 : 4.0,
           ),
+          alignment: Alignment.center,
+          child: widget.isLoading
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : Text(
+                  widget.text,
+                  style: TextStyle(
+                    fontSize: widget.fontSize,
+                    fontWeight: widget.fontWeight,
+                    color: widget.textColor ?? Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
         ),
-        onPressed: isLoading ? null : onPressed,
-        child: isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : Text(
-                text,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: fontWeight,
-                  color: textColor ?? Colors.white,
-                  letterSpacing: 0.3,
-                ),
-              ),
       ),
     );
   }
 }
 
-class CustomTextField extends StatelessWidget {
+class CustomTextField extends StatefulWidget {
   const CustomTextField({
     super.key,
     required this.label,
@@ -317,55 +356,97 @@ class CustomTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
 
   @override
+  State<CustomTextField> createState() => _CustomTextFieldState();
+}
+
+class _CustomTextFieldState extends State<CustomTextField> {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(() {
+      setState(() => _isFocused = _focusNode.hasFocus);
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return TextFormField(
-      controller: controller,
-      initialValue: initialValue,
-      obscureText: obscureText,
-      readOnly: readOnly,
-      onTap: onTap,
-      maxLines: maxLines,
-      keyboardType: keyboardType,
-      textCapitalization: textCapitalization,
-      validator: validator,
-      onChanged: onChanged,
-      style: const TextStyle(fontSize: 15, color: AppColors.ink),
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hintText,
-        floatingLabelBehavior: FloatingLabelBehavior.auto,
-        prefixIcon: Icon(prefixIcon, size: 20, color: AppColors.terracotta),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: Colors.white,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD8CCBA)),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            widget.label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: NeumorphicColors.textSecondary(isDark),
+            ),
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFFD8CCBA)),
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: NeumorphicDecorations.inset(
+            isDark: isDark,
+            radius: 14.0,
+            borderColor: _isFocused
+                ? NeumorphicColors.brandPrimary
+                : (isDark ? const Color(0xFF26334D) : const Color(0xFFDDE3ED)),
+            borderWidth: _isFocused ? 1.6 : 1.0,
+          ),
+          child: TextFormField(
+            focusNode: _focusNode,
+            controller: widget.controller,
+            initialValue: widget.initialValue,
+            obscureText: widget.obscureText,
+            readOnly: widget.readOnly,
+            onTap: widget.onTap,
+            maxLines: widget.maxLines,
+            keyboardType: widget.keyboardType,
+            textCapitalization: widget.textCapitalization,
+            validator: widget.validator,
+            onChanged: widget.onChanged,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+              color: NeumorphicColors.textPrimary(isDark),
+            ),
+            decoration: InputDecoration(
+              hintText: widget.hintText,
+              hintStyle: TextStyle(
+                color: NeumorphicColors.textMuted(isDark),
+                fontSize: 14,
+              ),
+              prefixIcon: Icon(
+                widget.prefixIcon,
+                size: 20,
+                color: _isFocused
+                    ? NeumorphicColors.brandPrimary
+                    : NeumorphicColors.textSecondary(isDark),
+              ),
+              suffixIcon: widget.suffixIcon,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              errorBorder: InputBorder.none,
+              focusedErrorBorder: InputBorder.none,
+            ),
+          ),
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.terracotta, width: 1.8),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.danger, width: 1.4),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.danger, width: 1.8),
-        ),
-        errorStyle: const TextStyle(
-          color: AppColors.danger,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      ],
     );
   }
 }
@@ -515,25 +596,33 @@ class StatCard extends StatelessWidget {
   final String value, label;
   final Color? color;
   @override
-  Widget build(BuildContext context) => Panel(
-        padding: const EdgeInsets.all(13),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                color: color ?? AppColors.terracotta,
-                fontSize: 19,
-                fontWeight: FontWeight.w800,
-              ),
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Panel(
+      padding: const EdgeInsets.all(13),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color ?? NeumorphicColors.brandPrimary,
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
             ),
-            Text(
-              label,
-              style: const TextStyle(fontSize: 11, color: Colors.black54),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: NeumorphicColors.textSecondary(isDark),
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class EmptyState extends StatelessWidget {

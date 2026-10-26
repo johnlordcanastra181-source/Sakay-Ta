@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/neumorphic_theme.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../state/app_state.dart';
+import '../widgets/neumorphic_widgets.dart';
 
 /// Shown only after the database confirms a driver's pending application.
 class DriverPendingApproval extends StatefulWidget {
@@ -109,142 +111,169 @@ class _DriverPendingApprovalState extends State<DriverPendingApproval> {
           ? 'Your driver application was submitted successfully and is waiting for an administrator to review it.'
           : 'Your driver application is pending administrator review. Please wait for a decision.',
     };
+    final Color statusColor = isRejected
+        ? AppColors.danger
+        : isApproved
+            ? NeumorphicColors.brandEmerald
+            : NeumorphicColors.brandAmber;
+    final IconData statusIcon = isRejected
+        ? Icons.cancel_outlined
+        : isApproved
+            ? Icons.check_circle_outline_rounded
+            : Icons.hourglass_top_rounded;
+
     return Scaffold(
       backgroundColor: AppColors.canvasColor(dark),
       body: SafeArea(
         child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  isRejected
-                      ? Icons.cancel_outlined
-                      : isApproved
-                          ? Icons.check_circle_outline_rounded
-                          : Icons.hourglass_top_rounded,
-                  size: 72,
-                  color: isRejected ? Colors.redAccent : AppColors.primary,
-                ),
-                const SizedBox(height: 24),
-                Text(title,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textColor(dark))),
-                const SizedBox(height: 12),
-                Text(
-                  description,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      fontSize: 16,
-                      color: AppColors.textColor(dark).withValues(alpha: 0.7)),
-                ),
-                if (isRejected &&
-                    app.pendingDriverApplicationRejectionReason?.isNotEmpty ==
-                        true) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Reason: ${app.pendingDriverApplicationRejectionReason}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textColor(dark),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-                if (app.pendingDriverApplicationStatusError != null) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'Status could not be refreshed. Check your connection and try again.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textColor(dark).withValues(alpha: 0.7),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 28),
-                if (isApproved) ...[
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      minimumSize: const Size.fromHeight(48),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: NeumorphicCard(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+                radius: 24,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 88,
+                      height: 88,
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: statusColor.withValues(alpha: 0.25),
+                          width: 2,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Icon(
+                        statusIcon,
+                        size: 48,
+                        color: statusColor,
                       ),
                     ),
-                    onPressed: _isNavigatingToDashboard
-                        ? null
-                        : () async {
-                            setState(() => _isNavigatingToDashboard = true);
-                            try {
-                              final initialized =
-                                  await app.initializeApprovedDriverSession();
-                              if (!mounted) return;
-                              if (initialized &&
-                                  app.currentUser?.isDriver == true) {
-                                widget.onNavigate(AppScreen.driverHome);
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Your session could not be verified. Please sign in to access your dashboard.',
-                                    ),
-                                    backgroundColor: Colors.orange,
-                                  ),
-                                );
-                                widget.onNavigate(AppScreen.login);
-                              }
-                            } finally {
-                              if (mounted) {
-                                setState(
-                                    () => _isNavigatingToDashboard = false);
-                              }
-                            }
-                          },
-                    icon: _isNavigatingToDashboard
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.drive_eta_rounded),
-                    label: _isNavigatingToDashboard
-                        ? const Text('Loading Dashboard...')
-                        : const Text('Go to Driver Dashboard'),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (hasReceipt && !isApproved && !isRejected)
-                  OutlinedButton.icon(
-                    onPressed: _isRefreshing ? null : _refreshStatus,
-                    icon: _isRefreshing
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.refresh_rounded),
-                    label: const Text('Check status'),
-                  ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    if (app.currentUser?.isDriver == true) await app.logout();
-                    widget.onNavigate(AppScreen.login);
-                  },
-                  icon: const Icon(Icons.login_rounded),
-                  label: const Text('Go to login'),
+                    const SizedBox(height: 24),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textColor(dark),
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      description,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.45,
+                        color: AppColors.subtextColor(dark),
+                      ),
+                    ),
+                    if (isRejected &&
+                        app.pendingDriverApplicationRejectionReason?.isNotEmpty ==
+                            true) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: NeumorphicDecorations.inset(
+                          isDark: dark,
+                          radius: 12,
+                          borderColor: AppColors.danger.withValues(alpha: 0.3),
+                        ),
+                        child: Text(
+                          'Reason: ${app.pendingDriverApplicationRejectionReason}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppColors.danger,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (app.pendingDriverApplicationStatusError != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Status could not be refreshed. Check your connection and try again.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.danger.withValues(alpha: 0.8),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 28),
+                    if (isApproved) ...[
+                      NeumorphicButton(
+                        text: _isNavigatingToDashboard
+                            ? 'Loading Dashboard...'
+                            : 'Go to Driver Dashboard',
+                        icon: Icons.drive_eta_rounded,
+                        isLoading: _isNavigatingToDashboard,
+                        accentColor: NeumorphicColors.brandEmerald,
+                        height: 52,
+                        onPressed: _isNavigatingToDashboard
+                            ? null
+                            : () async {
+                                setState(() => _isNavigatingToDashboard = true);
+                                try {
+                                  final initialized =
+                                      await app.initializeApprovedDriverSession();
+                                  if (!mounted) return;
+                                  if (initialized &&
+                                      app.currentUser?.isDriver == true) {
+                                    widget.onNavigate(AppScreen.driverHome);
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Your session could not be verified. Please sign in to access your dashboard.',
+                                        ),
+                                        backgroundColor: Colors.orange,
+                                      ),
+                                    );
+                                    widget.onNavigate(AppScreen.login);
+                                  }
+                                } finally {
+                                  if (mounted) {
+                                    setState(
+                                        () => _isNavigatingToDashboard = false);
+                                  }
+                                }
+                              },
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (hasReceipt && !isApproved && !isRejected) ...[
+                      NeumorphicButton(
+                        text: 'Check status',
+                        icon: Icons.refresh_rounded,
+                        isSecondary: true,
+                        isLoading: _isRefreshing,
+                        height: 48,
+                        onPressed: _isRefreshing ? null : _refreshStatus,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    NeumorphicButton(
+                      text: 'Go to login',
+                      icon: Icons.login_rounded,
+                      isSecondary: true,
+                      height: 48,
+                      onPressed: () async {
+                        if (app.currentUser?.isDriver == true) await app.logout();
+                        widget.onNavigate(AppScreen.login);
+                      },
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),

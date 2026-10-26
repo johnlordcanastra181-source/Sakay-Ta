@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/neumorphic_theme.dart';
 import '../core/theme.dart';
 import '../main.dart';
 import '../state/app_state.dart';
+import '../widgets/neumorphic_widgets.dart';
 
 class PerformancePage extends StatelessWidget {
   const PerformancePage({super.key, required this.onNavigate});
@@ -18,74 +20,90 @@ class PerformancePage extends StatelessWidget {
 
     if (driver == null || !driver.isDriver) {
       return Scaffold(
-        backgroundColor: AppColors.canvasColor(isDark),
+        backgroundColor: NeumorphicColors.canvas(isDark),
         body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.lock_outline_rounded,
-                size: 48,
-                color: AppColors.subtextColor(isDark),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: NeumorphicCard(
+              padding: const EdgeInsets.all(32),
+              radius: 24,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: NeumorphicDecorations.inset(
+                      isDark: isDark,
+                      radius: 30,
+                    ),
+                    child: Icon(
+                      Icons.lock_outline_rounded,
+                      size: 30,
+                      color: NeumorphicColors.subtext(isDark),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Driver access only',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: NeumorphicColors.text(isDark),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Please sign in as an accredited driver to view stats.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: NeumorphicColors.subtext(isDark),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  NeumorphicButton(
+                    text: 'Sign In',
+                    accentColor: NeumorphicColors.brandPrimary,
+                    onPressed: () => onNavigate(AppScreen.login),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              Text(
-                'Driver access only',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textColor(isDark),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Please sign in as an accredited driver to view stats.',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.subtextColor(isDark),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => onNavigate(AppScreen.login),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.terracotta,
-                  foregroundColor: Colors.white,
-                ),
-                child: const Text('Sign In'),
-              ),
-            ],
+            ),
           ),
         ),
       );
     }
 
+    final surfaceColor = NeumorphicColors.surface(isDark);
+
     return Scaffold(
-      backgroundColor: AppColors.canvasColor(isDark),
+      backgroundColor: NeumorphicColors.canvas(isDark),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Top Bar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
                       Container(
-                        width: 34,
-                        height: 34,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkCardElevated
-                              : const Color(0xFF1E2B45),
+                          color: const Color(0xFF1E2B45),
                           shape: BoxShape.circle,
+                          boxShadow: NeumorphicDecorations.subtleShadows(isDark),
                         ),
                         child: const Center(
                           child: Icon(
                             Icons.electric_rickshaw_rounded,
-                            size: 19,
+                            size: 20,
                             color: Color(0xFFFFD600),
                           ),
                         ),
@@ -94,9 +112,9 @@ class PerformancePage extends StatelessWidget {
                       Text(
                         'Performance Stats',
                         style: TextStyle(
-                          fontSize: 18.5,
+                          fontSize: 20,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.textColor(isDark),
+                          color: NeumorphicColors.text(isDark),
                           letterSpacing: -0.3,
                         ),
                       ),
@@ -110,10 +128,17 @@ class PerformancePage extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: driver.isOnline
                           ? const Color(0xFF22C55E)
-                          : (isDark
-                              ? const Color(0xFF64748B)
-                              : const Color(0xFF94A3B8)),
+                          : const Color(0xFF94A3B8),
                       borderRadius: BorderRadius.circular(20),
+                      boxShadow: driver.isOnline
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF22C55E).withValues(alpha: 0.35),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2),
+                              ),
+                            ]
+                          : null,
                     ),
                     child: Text(
                       driver.isOnline ? 'ON' : 'OFF',
@@ -127,92 +152,102 @@ class PerformancePage extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 24),
               Text(
                 'Your Performance',
                 style: TextStyle(
                   fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textColor(isDark),
+                  fontWeight: FontWeight.w900,
+                  color: NeumorphicColors.text(isDark),
                   letterSpacing: -0.4,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 18),
               _SummaryCard(
                 title: 'Rating (${driver.ratingCount})',
                 value: driver.ratingCount > 0
                     ? driver.rating.toStringAsFixed(1)
-                    : 'New',
+                    : '0.0',
                 isDark: isDark,
                 icon: Icons.star_rounded,
-                accent: AppColors.goldVibrant,
+                accent: isDark ? AppColors.gold : const Color(0xFFD97706),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               _SummaryCard(
                 title: 'Acceptance',
                 value: '${driver.acceptanceRate.round()}%',
                 isDark: isDark,
                 icon: Icons.check_circle_rounded,
-                accent: AppColors.emeraldVibrant,
+                accent: isDark ? AppColors.emerald : const Color(0xFF10B981),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               _SummaryCard(
                 title: 'Trips this week',
                 value: '${driver.totalTrips}',
                 isDark: isDark,
                 icon: Icons.route_rounded,
-                accent: AppColors.terracottaVibrant,
+                accent: NeumorphicColors.brandPrimary,
               ),
             ],
           ),
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: 2,
-        backgroundColor: AppColors.navBgColor(isDark),
-        indicatorColor: isDark
-            ? AppColors.goldVibrant.withValues(alpha: 0.2)
-            : const Color(0xFFFEF08A).withValues(alpha: 0.5),
-        onDestinationSelected: (index) {
-          if (index == 0) onNavigate(AppScreen.driverHome);
-          if (index == 1) onNavigate(AppScreen.wallet);
-          if (index == 2) onNavigate(AppScreen.performance);
-          if (index == 3) onNavigate(AppScreen.profile);
-        },
-        destinations: [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined,
-                color: AppColors.navInactiveColor(isDark)),
-            selectedIcon: Icon(Icons.home_rounded,
-                color:
-                    isDark ? AppColors.goldVibrant : const Color(0xFF6E5600)),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined,
-                color: AppColors.navInactiveColor(isDark)),
-            selectedIcon: Icon(Icons.account_balance_wallet_rounded,
-                color:
-                    isDark ? AppColors.goldVibrant : const Color(0xFF6E5600)),
-            label: 'Wallet',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.insights_outlined,
-                color: AppColors.navInactiveColor(isDark)),
-            selectedIcon: Icon(Icons.insights_rounded,
-                color:
-                    isDark ? AppColors.goldVibrant : const Color(0xFF6E5600)),
-            label: 'Stats',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded,
-                color: AppColors.navInactiveColor(isDark)),
-            selectedIcon: Icon(Icons.person_rounded,
-                color:
-                    isDark ? AppColors.goldVibrant : const Color(0xFF6E5600)),
-            label: 'Profile',
-          ),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: surfaceColor,
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : const Color(0xFFA6B4C9).withValues(alpha: 0.3),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: NavigationBar(
+          selectedIndex: 2,
+          backgroundColor: surfaceColor,
+          indicatorColor: NeumorphicColors.brandPrimary.withValues(alpha: 0.15),
+          elevation: 0,
+          height: 64,
+          onDestinationSelected: (index) {
+            if (index == 0) onNavigate(AppScreen.driverHome);
+            if (index == 1) onNavigate(AppScreen.wallet);
+            if (index == 2) onNavigate(AppScreen.performance);
+            if (index == 3) onNavigate(AppScreen.profile);
+          },
+          destinations: [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined,
+                  color: NeumorphicColors.subtext(isDark)),
+              selectedIcon: Icon(Icons.home_rounded,
+                  color: NeumorphicColors.brandPrimary),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_balance_wallet_outlined,
+                  color: NeumorphicColors.subtext(isDark)),
+              selectedIcon: Icon(Icons.account_balance_wallet_rounded,
+                  color: NeumorphicColors.brandPrimary),
+              label: 'Wallet',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bar_chart_outlined,
+                  color: NeumorphicColors.subtext(isDark)),
+              selectedIcon: Icon(Icons.bar_chart_rounded,
+                  color: NeumorphicColors.brandPrimary),
+              label: 'Stats',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline_rounded,
+                  color: NeumorphicColors.subtext(isDark)),
+              selectedIcon: Icon(Icons.person_rounded,
+                  color: NeumorphicColors.brandPrimary),
+              label: 'Profile',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -235,42 +270,39 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardColor(isDark),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.borderColor(isDark)),
-      ),
+    return NeumorphicCard(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      radius: 18,
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(12),
+            width: 48,
+            height: 48,
+            decoration: NeumorphicDecorations.inset(
+              isDark: isDark,
+              radius: 24,
             ),
-            child: Icon(icon, color: accent),
+            child: Icon(icon, color: accent, size: 24),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
                 style: TextStyle(
-                  fontSize: 12,
-                  color: AppColors.subtextColor(isDark),
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: NeumorphicColors.subtext(isDark),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 value,
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textColor(isDark),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w900,
+                  color: NeumorphicColors.text(isDark),
                 ),
               ),
             ],

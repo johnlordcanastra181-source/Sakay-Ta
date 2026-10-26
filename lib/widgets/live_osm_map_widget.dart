@@ -63,8 +63,6 @@ class LiveOsmMapWidget extends StatefulWidget {
 class _LiveOsmMapWidgetState extends State<LiveOsmMapWidget>
     with TickerProviderStateMixin {
   late final MapController _mapController;
-  late final AnimationController _pulseController;
-  late final Animation<double> _pulseAnimation;
 
   // Track map camera animation state
   AnimationController? _cameraAnimController;
@@ -79,16 +77,6 @@ class _LiveOsmMapWidgetState extends State<LiveOsmMapWidget>
   void initState() {
     super.initState();
     _mapController = MapController();
-
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat();
-
-    _pulseAnimation = CurvedAnimation(
-      parent: _pulseController,
-      curve: Curves.easeOut,
-    );
   }
 
   @override
@@ -114,7 +102,6 @@ class _LiveOsmMapWidgetState extends State<LiveOsmMapWidget>
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _cameraAnimController?.dispose();
     _mapController.dispose();
     super.dispose();
@@ -223,7 +210,6 @@ class _LiveOsmMapWidgetState extends State<LiveOsmMapWidget>
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width > 768;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Stack(
       children: [
@@ -247,31 +233,20 @@ class _LiveOsmMapWidgetState extends State<LiveOsmMapWidget>
               // OpenStreetMap Standard Tile Layer
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                retinaMode: true,
+                retinaMode: false,
+                keepBuffer: 1,
+                panBuffer: 0,
+                tileUpdateTransformer:
+                    TileUpdateTransformers.throttle(const Duration(milliseconds: 120)),
+                evictErrorTileStrategy: EvictErrorTileStrategy.none,
                 userAgentPackageName: 'ph.sakayta.passenger',
                 maxZoom: 19,
                 subdomains: const ['a', 'b', 'c'],
-                
               ),
 
-              // Route Polylines (OSRM Road Network Path)
+              // Route Polylines (single crisp layer to minimize GPU overdraw on low-end phones)
               if (widget.destination != null &&
-                  widget.routePoints.isNotEmpty) ...[
-                // Outer glow shadow
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: widget.routePoints
-                          .map((p) => ll.LatLng(p.lat, p.lng))
-                          .toList(),
-                      color: const Color(0xFF1D4ED8).withValues(alpha: 0.35),
-                      strokeWidth: 10.0,
-                      strokeCap: StrokeCap.round,
-                      strokeJoin: StrokeJoin.round,
-                    ),
-                  ],
-                ),
-                // Inner crisp route line
+                  widget.routePoints.isNotEmpty)
                 PolylineLayer(
                   polylines: [
                     Polyline(
@@ -279,13 +254,12 @@ class _LiveOsmMapWidgetState extends State<LiveOsmMapWidget>
                           .map((p) => ll.LatLng(p.lat, p.lng))
                           .toList(),
                       color: const Color(0xFF2563EB),
-                      strokeWidth: 5.5,
+                      strokeWidth: 5.0,
                       strokeCap: StrokeCap.round,
                       strokeJoin: StrokeJoin.round,
                     ),
                   ],
                 ),
-              ],
 
               // Interactive Markers Layer
               MarkerLayer(
@@ -612,58 +586,43 @@ class _LiveOsmMapWidgetState extends State<LiveOsmMapWidget>
     );
   }
 
-  /// Live blue pulsing GPS circle marker
+  /// Static high-contrast GPS halo marker (zero idle 60 FPS GPU tick overhead)
   Widget _buildPulsingGpsMarker() {
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        final scale = 1.0 + (_pulseAnimation.value * 0.8);
-        final opacity = (1.0 - _pulseAnimation.value).clamp(0.0, 1.0);
-
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            // Outer Pulsing Glow
-            Transform.scale(
-              scale: scale,
-              child: Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color:
-                      const Color(0xFF3B82F6).withValues(alpha: 0.35 * opacity),
-                ),
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(0xFF3B82F6).withValues(alpha: 0.22),
+          ),
+        ),
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.22),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
               ),
-            ),
-            // Middle White Ring
-            Container(
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.25),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-            ),
-            // Inner Core Blue Dot
-            Container(
-              width: 14,
-              height: 14,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Color(0xFF2563EB),
-              ),
-            ),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+        Container(
+          width: 14,
+          height: 14,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color(0xFF2563EB),
+          ),
+        ),
+      ],
     );
   }
 

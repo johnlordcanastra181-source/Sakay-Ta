@@ -64,7 +64,10 @@ class _PhilippineAddressSelectorState extends State<PhilippineAddressSelector> {
             final matchCity = _cities.where((c) => c.code == initial.cityCode);
             if (matchCity.isNotEmpty) {
               _selectedCity = matchCity.first;
-              _barangays = PSGCData.getBarangaysForCity(_selectedCity!.code);
+              _barangays = PSGCData.getBarangaysForCity(
+                _selectedCity!.code,
+                _selectedProvince?.code,
+              );
 
               if (initial.barangayCode.isNotEmpty) {
                 final matchBrgy =
@@ -110,7 +113,9 @@ class _PhilippineAddressSelectorState extends State<PhilippineAddressSelector> {
     setState(() {
       _selectedCity = city;
       _selectedBarangay = null;
-      _barangays = city != null ? PSGCData.getBarangaysForCity(city.code) : [];
+      _barangays = city != null
+          ? PSGCData.getBarangaysForCity(city.code, _selectedProvince?.code)
+          : [];
     });
     _notifyChange();
   }

@@ -690,6 +690,8 @@ class _DriverWalletViewState extends State<_DriverWalletView> {
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
@@ -702,18 +704,21 @@ class _DriverWalletViewState extends State<_DriverWalletView> {
               const SizedBox(width: 8),
 
               // Trailing Amount: +₱150.00 (Teal Green) / -₱500.00 (Dark Charcoal)
-              Text(
-                '${entry.amount >= 0 ? "+" : "-"}₱${formatter.format(entry.amount.abs())}',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: entry.amount >= 0
-                      ? (isDark
-                          ? const Color(0xFF2DD4BF)
-                          : const Color(0xFF0F766E))
-                      : (isDark
-                          ? const Color(0xFFF87171)
-                          : const Color(0xFF0F172A)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${entry.amount >= 0 ? "+" : "-"}₱${formatter.format(entry.amount.abs())}',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: entry.amount >= 0
+                        ? (isDark
+                            ? const Color(0xFF2DD4BF)
+                            : const Color(0xFF0F766E))
+                        : (isDark
+                            ? const Color(0xFFF87171)
+                            : const Color(0xFF0F172A)),
+                  ),
                 ),
               ),
             ],

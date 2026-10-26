@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:uuid/uuid.dart';
 
 import '../core/constants.dart';
+import '../core/logger.dart';
 import '../models/app_user.dart';
 import '../models/transaction.dart';
 import '../models/trip.dart';
@@ -29,15 +30,21 @@ class TripService {
     required Geo pickup,
     required Geo dropoff,
     required double estimatedFare,
+    double? distanceKm,
+    int? durationMin,
     String paymentMethod = PaymentMethod.cash,
     bool queued = false,
     String? driverId,
   }) async {
     final database = await db.database;
     final id = _uuid.v4();
-    final km = Geo.distanceKm(pickup, dropoff);
+    final km = (distanceKm != null && distanceKm > 0)
+        ? distanceKm
+        : Geo.distanceKm(pickup, dropoff);
     final fare = estimatedFare;
-    final duration = (km / 25 * 60).ceil().clamp(2, 180);
+    final duration = (durationMin != null && durationMin > 0)
+        ? durationMin
+        : (km / 25 * 60).ceil().clamp(2, 180);
 
     final passenger = await auth.getUser(passengerId);
     final trip = Trip(
@@ -97,17 +104,6 @@ class TripService {
       debugPrint('TripService: persisted ride local cache note ($error)');
     }
     return authoritativeTrip;
-  }
-
-  Future<Trip> _assign(Trip trip, AppUser driver) async {
-    final database = await db.database;
-    final updated = trip.copyWith(driverId: driver.id);
-    await database
-        .update('trip', updated.toMap(), where: 'id = ?', whereArgs: [trip.id]);
-    await SupabaseService.instance.updateTrip(trip.id, {
-      'driver_id': driver.id,
-    });
-    return updated;
   }
 
   Future<Trip> _accept(Trip trip, AppUser driver) async {
@@ -278,7 +274,10 @@ class TripService {
       try {
         final cloudTrip = await SupabaseService.instance.getTrip(id);
         if (cloudTrip != null) return cloudTrip;
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.warn('TripService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
     }
     try {
       final database = await db.database;
@@ -303,7 +302,10 @@ class TripService {
             .first
             .timeout(const Duration(seconds: 4));
         if (trip != null) return trip;
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.warn('TripService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
     }
     try {
       final database = await db.database;
@@ -321,7 +323,9 @@ class TripService {
         limit: 1,
       );
       if (rows.isNotEmpty) return Trip.fromMap(rows.first);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.warn('TripService non-fatal note: $e', error: e, stackTrace: s);
+    }
     return null;
   }
 
@@ -333,7 +337,10 @@ class TripService {
             .first
             .timeout(const Duration(seconds: 4));
         if (trip != null) return trip;
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.warn('TripService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
     }
     try {
       final database = await db.database;
@@ -351,7 +358,9 @@ class TripService {
         limit: 1,
       );
       if (rows.isNotEmpty) return Trip.fromMap(rows.first);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.warn('TripService non-fatal note: $e', error: e, stackTrace: s);
+    }
     return null;
   }
 
@@ -364,7 +373,10 @@ class TripService {
             .first
             .timeout(const Duration(seconds: 4));
         if (snap.isNotEmpty) return snap.first;
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.warn('TripService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
     }
     try {
       final database = await db.database;
@@ -376,7 +388,9 @@ class TripService {
         limit: 1,
       );
       if (rows.isNotEmpty) return Trip.fromMap(rows.first);
-    } catch (_) {}
+    } catch (e, s) {
+      AppLogger.warn('TripService non-fatal note: $e', error: e, stackTrace: s);
+    }
     return null;
   }
 
@@ -399,7 +413,10 @@ class TripService {
             .first
             .timeout(const Duration(seconds: 4));
         if (cloudTrips.isNotEmpty) return cloudTrips;
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.warn('TripService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
     }
     try {
       final database = await db.database;
@@ -456,7 +473,10 @@ class TripService {
         final cloud =
             await SupabaseService.instance.getPassengerTrips(passengerId);
         if (cloud.isNotEmpty) return cloud;
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.warn('TripService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
     }
     try {
       final database = await db.database;
@@ -480,7 +500,10 @@ class TripService {
             .first
             .timeout(const Duration(seconds: 4));
         if (cloud.isNotEmpty) return cloud;
-      } catch (_) {}
+      } catch (e, s) {
+        AppLogger.warn('TripService non-fatal note: $e',
+            error: e, stackTrace: s);
+      }
     }
     try {
       final database = await db.database;

@@ -18,9 +18,15 @@ const List<Color> kAvatarColors = [
 
 /// Returns an [ImageProvider] for a profile photo URL.
 /// Supports data URIs (`data:image/...;base64,...`), HTTP/HTTPS URLs, and local files.
-ImageProvider<Object>? getUserAvatarImageProvider(String? photoUrl) {
+/// Downscales decoded bitmaps via [ResizeImage.resizeIfNeeded] so high-MP camera
+/// photos do not consume 40MB+ of uncompressed RAM on low-end devices.
+ImageProvider<Object>? getUserAvatarImageProvider(
+  String? photoUrl, {
+  int targetDecodeSize = 128,
+}) {
   if (photoUrl == null || photoUrl.trim().isEmpty) return null;
   final clean = photoUrl.trim();
+  ImageProvider<Object>? baseProvider;
 
   // 1. Base64 Data URI
   if (clean.startsWith('data:image/')) {
@@ -29,27 +35,29 @@ ImageProvider<Object>? getUserAvatarImageProvider(String? photoUrl) {
       if (commaIdx != -1) {
         final b64 = clean.substring(commaIdx + 1);
         final bytes = base64Decode(b64);
-        return MemoryImage(bytes);
+        baseProvider = MemoryImage(bytes);
       }
-    } catch (_) {}
-  }
-
-  // 2. Network URL
-  if (clean.startsWith('http://') || clean.startsWith('https://')) {
-    return NetworkImage(clean);
-  }
-
-  // 3. Local File Path (non-web)
-  if (!kIsWeb) {
+    } catch (e) {
+      debugPrint('UserAvatar non-fatal note: $e');
+    }
+  } else if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    // 2. Network URL
+    baseProvider = NetworkImage(clean);
+  } else if (!kIsWeb) {
+    // 3. Local File Path (non-web)
     try {
       final file = File(clean.replaceFirst('file://', ''));
       if (file.existsSync()) {
-        return FileImage(file);
+        baseProvider = FileImage(file);
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('UserAvatar non-fatal note: $e');
+    }
   }
 
-  return null;
+  if (baseProvider == null) return null;
+  final clampedSize = targetDecodeSize.clamp(64, 256);
+  return ResizeImage.resizeIfNeeded(clampedSize, clampedSize, baseProvider);
 }
 
 /// A versatile, unified avatar component for passengers, drivers, and admins.
@@ -94,7 +102,10 @@ class UserAvatar extends StatelessWidget {
   }
 
   Widget _buildImageOrFallback() {
-    final provider = getUserAvatarImageProvider(photoUrl);
+    final provider = getUserAvatarImageProvider(
+      photoUrl,
+      targetDecodeSize: (radius * 3).toInt(),
+    );
 
     if (provider != null) {
       return CircleAvatar(

@@ -231,7 +231,12 @@ async function checkEligibleToda(admin: SupabaseClient, vehicleType: string, tod
 async function reserveRateLimit(admin: SupabaseClient, request: Request, email: string) {
   const ip = request.headers.get('cf-connecting-ip') ??
     request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-  const salt = Deno.env.get('DRIVER_APPLICATION_RATE_LIMIT_SALT') ?? Deno.env.get('SUPABASE_URL')!;
+  const salt = Deno.env.get('DRIVER_APPLICATION_RATE_LIMIT_SALT') ||
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')?.slice(0, 32);
+  if (!salt) {
+    console.error('[RateLimit] Critical: neither DRIVER_APPLICATION_RATE_LIMIT_SALT nor service role secret is available.');
+    throw new HttpError('Service configuration error.', 500);
+  }
   const limits = [
     { key: `ip:${ip}`, limit: 5 },
     { key: `email:${email}`, limit: 3 },
@@ -470,7 +475,12 @@ async function sendRejectionEmail(application: Record<string, any>, reason: stri
       text: `Hello ${application.full_name},\n\nYour Sakay Ta driver application was not approved.\n\nReason: ${reason}\n\nYou may contact Sakay Ta support if you need clarification.`,
     }),
   });
-  return result.ok ? 'sent' : 'failed';
+  if (!result.ok) {
+    const errorPayload = await result.text().catch(() => 'unknown error');
+    console.error(`[EmailService] Rejection email Resend API error (status ${result.status}): ${errorPayload}`);
+    return 'failed';
+  }
+  return 'sent';
 }
 
 async function sendActivationEmail(
@@ -489,7 +499,10 @@ async function sendActivationEmail(
       options: { redirectTo },
     });
     const actionLink = data?.properties?.action_link;
-    if (error || typeof actionLink !== 'string' || !actionLink) return 'failed';
+    if (error || typeof actionLink !== 'string' || !actionLink) {
+      console.error('[EmailService] Failed to generate activation recovery link:', error);
+      return 'failed';
+    }
 
     const result = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -501,8 +514,14 @@ async function sendActivationEmail(
         text: `Hello ${application.full_name},\n\nYour Sakay Ta Driver application is approved. Use this secure link to set your password and activate your account:\n\n${actionLink}\n\nYour account will stay offline until you choose to go online.`,
       }),
     });
-    return result.ok ? 'sent' : 'failed';
-  } catch {
+    if (!result.ok) {
+      const errorPayload = await result.text().catch(() => 'unknown error');
+      console.error(`[EmailService] Activation email Resend API error (status ${result.status}): ${errorPayload}`);
+      return 'failed';
+    }
+    return 'sent';
+  } catch (err) {
+    console.error('[EmailService] Activation email dispatch exception:', err);
     return 'failed';
   }
 }
@@ -532,35 +551,24 @@ async function rejectApplication(
     if (current.status === 'rejected') return response(request, { status: 'rejected', alreadyReviewed: true });
     throw new HttpError(`This application is ${current.status} and cannot be rejected now.`, 409);
   }
-  const notificationStatus = await sendRejectionEmail(rejected, reason.trim()).catch(() => 'failed');
+  const notificationStatus = await sendRejectionEmail(rejected, reason.trim()).catch((err) => {
+    console.error('[EmailService] Rejection email dispatch crashed:', err);
+    return 'failed';
+  });
   await admin.from('driver_applications').update({ applicant_notification_status: notificationStatus }).eq('id', applicationId);
 
   const authUserId = (rejected.auth_user_id || rejected.submitted_by_auth_user_id) as string | null;
   if (authUserId) {
     try {
-      const { count: rideCount } = await admin.from('rides')
-        .select('*', { count: 'exact', head: true })
-        .or(`passenger_id.eq.${authUserId},driver_id.eq.${authUserId}`);
-      const { data: passengerProfile } = await admin.from('passenger_profiles')
-        .select('user_id').eq('user_id', authUserId).maybeSingle();
-
-      if (!rideCount && !passengerProfile) {
-        await admin.from('driver_online_sessions').delete().eq('driver_id', authUserId);
-        await admin.from('driver_presence').delete().eq('driver_id', authUserId);
-        await admin.from('drivers').delete().eq('user_id', authUserId);
-        await admin.from('driver_documents').delete().eq('driver_id', authUserId);
-        await admin.from('notifications').delete().eq('user_id', authUserId);
-        await admin.from('profiles').delete().eq('id', authUserId);
-        await admin.auth.admin.deleteUser(authUserId).catch((err) => {
-          console.warn('Could not delete rejected auth user:', err);
-        });
-      } else {
-        await admin.from('driver_online_sessions').delete().eq('driver_id', authUserId);
-        await admin.from('driver_presence').delete().eq('driver_id', authUserId);
-        await admin.from('drivers').delete().eq('user_id', authUserId);
-      }
+      // Only clean up driver-specific records. Always preserve the user's passenger
+      // profile, ride history, notifications, and authentication account!
+      await admin.from('driver_online_sessions').delete().eq('driver_id', authUserId);
+      await admin.from('driver_presence').delete().eq('driver_id', authUserId);
+      await admin.from('drivers').delete().eq('user_id', authUserId);
+      await admin.from('driver_documents').delete().eq('driver_id', authUserId);
+      await admin.from('user_roles').delete().eq('user_id', authUserId).eq('role', 'driver');
     } catch (cleanupError) {
-      console.warn('Post-rejection account cleanup error:', cleanupError);
+      console.warn('Post-rejection driver cleanup error:', cleanupError);
     }
   }
 
@@ -705,6 +713,27 @@ async function writeAccountForApprovedApplication(
       storage_path: path,
     }, { onConflict: 'driver_id,document_type,storage_path', ignoreDuplicates: true });
     if (error) throw error;
+  }
+
+  if (application.doc_profile) {
+    try {
+      const { data: photoBlob, error: photoErr } = await admin.storage
+        .from('driver-documents')
+        .download(application.doc_profile);
+      if (!photoErr && photoBlob) {
+        const avatarPath = `${authUserId}/profile.jpg`;
+        const buffer = Buffer.from(await photoBlob.arrayBuffer());
+        await admin.storage.from('avatars').upload(avatarPath, buffer, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+        await admin.from('profiles').update({
+          profile_photo_path: avatarPath,
+        }).eq('id', authUserId);
+      }
+    } catch (photoSyncError) {
+      console.warn('Failed to sync driver profile photo to avatars:', photoSyncError);
+    }
   }
 
   if (!existingIdentity && activationNotificationStatus !== 'sent' && !activationNotificationAttempted) {

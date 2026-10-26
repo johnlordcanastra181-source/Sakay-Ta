@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,7 @@ import '../services/supabase_service.dart';
 import '../services/osm_map_service.dart';
 import '../state/app_state.dart';
 import '../widgets/live_osm_map_widget.dart';
+import '../widgets/rate_driver_modal.dart';
 import '../widgets/user_avatar.dart';
 
 enum RideTrackingViewStatus {
@@ -53,6 +55,9 @@ class _RideTrackingState extends State<RideTracking> {
   int _retryKey = 0;
   Stream<Trip?>? _rideStream;
   String? _rideStreamKey;
+  String? _trackedRideId;
+  Trip? _lastTrackedTrip;
+  String? _autoPromptedModalRideId;
   Stream<DriverLiveLocation?>? _driverLocationStream;
   String? _driverLocationStreamKey;
 
@@ -83,18 +88,19 @@ class _RideTrackingState extends State<RideTracking> {
   Stream<Trip?> _stableRideStream(
       AppState app, AppUser user, String? targetRideId) {
     final normalizedRideId = targetRideId?.trim();
-    final explicitRide = widget.rideId?.trim().isNotEmpty == true;
-    final useSharedActiveStream = !explicitRide &&
-        (normalizedRideId == null || normalizedRideId == app.activeTrip?.id);
-    final key = '${user.id}|${user.isDriver}|${normalizedRideId ?? 'active'}|'
-        '$useSharedActiveStream';
+    if (normalizedRideId != null && normalizedRideId.isNotEmpty) {
+      _trackedRideId = normalizedRideId;
+    }
+    final lockedId = _trackedRideId ?? normalizedRideId;
+    final hasLockedId = lockedId != null && lockedId.isNotEmpty;
+    final key = '${user.id}|${user.isDriver}|${lockedId ?? 'active'}';
     if (_rideStream == null || _rideStreamKey != key) {
       _rideStreamKey = key;
-      _rideStream = useSharedActiveStream
-          ? (user.isDriver
+      _rideStream = hasLockedId
+          ? app.streamTrip(lockedId)
+          : (user.isDriver
               ? app.streamActiveTripForDriver(user.id)
-              : app.streamActiveTripForPassenger(user.id))
-          : app.streamTrip(normalizedRideId!);
+              : app.streamActiveTripForPassenger(user.id));
     }
     return _rideStream!;
   }
@@ -272,21 +278,24 @@ class _RideTrackingState extends State<RideTracking> {
       return _unauthenticatedScreen(dark);
     }
 
-    // Direct ride ID lookup with active-ride fallback
+    // Direct ride ID lookup with active-ride and pending-rating fallback
     final targetRideId = widget.rideId?.trim().isNotEmpty == true
         ? widget.rideId!.trim()
-        : app.activeTrip?.id;
+        : (app.activeTrip?.id ?? app.pendingRatingTrip?.id ?? _trackedRideId);
 
     final stream = _stableRideStream(app, user, targetRideId);
+    final initialTrip =
+        (widget.rideId == null || widget.rideId == app.activeTrip?.id)
+            ? (app.activeTrip ?? app.pendingRatingTrip ?? _lastTrackedTrip)
+            : (app.pendingRatingTrip?.id == widget.rideId
+                ? app.pendingRatingTrip
+                : _lastTrackedTrip);
 
     return KeyedSubtree(
       key: ValueKey('tracking_stream_$_retryKey'),
       child: StreamBuilder<Trip?>(
         stream: stream,
-        initialData:
-            (widget.rideId == null || widget.rideId == app.activeTrip?.id)
-                ? app.activeTrip
-                : null,
+        initialData: initialTrip,
         builder: (context, snapshot) {
           // Check for stream error and classify
           if (snapshot.hasError) {
@@ -314,12 +323,22 @@ class _RideTrackingState extends State<RideTracking> {
 
           final trip = snapshot.data;
           if (trip == null) {
-            // Also check if app state has an active trip before declaring no active ride
+            if (app.pendingRatingTrip != null) {
+              return _routeTripScreen(context, app.pendingRatingTrip!, dark);
+            }
+            if (_lastTrackedTrip != null &&
+                RideStatus.normalize(_lastTrackedTrip!.status) ==
+                    RideStatus.completed) {
+              return _routeTripScreen(context, _lastTrackedTrip!, dark);
+            }
             if (app.activeTrip != null && app.activeTrip!.isActive) {
               return _routeTripScreen(context, app.activeTrip!, dark);
             }
             return _noActiveRideScreen(context, user, dark);
           }
+
+          _trackedRideId = trip.id;
+          _lastTrackedTrip = trip;
 
           debugPrint(
               '[SakayTa][RideTracking] uid=${user.id} rideId=${trip.id} status=${trip.status} driverId=${trip.driverId}');
@@ -383,7 +402,7 @@ class _RideTrackingState extends State<RideTracking> {
               ),
             ),
           SizedBox(
-            height: 320,
+            height: math.min(280.0, MediaQuery.sizeOf(context).height * 0.36),
             child: LiveOsmMapWidget(
               passengerLocation: _passengerLocation ?? trip.pickup,
               currentAddress: trip.pickupAddress,
@@ -1021,38 +1040,54 @@ class _RideTrackingState extends State<RideTracking> {
         ),
       );
 
-  Widget _completedScreen(BuildContext context, Trip trip, bool dark) =>
-      Scaffold(
-        backgroundColor: AppColors.canvasColor(dark),
-        appBar: AppBar(
-          title: const Text('Ride Completed'),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => widget.onNavigate(AppScreen.rides),
-          ),
+  Widget _completedScreen(BuildContext context, Trip trip, bool dark) {
+    final currentUser = AppState.instance.currentUser;
+    final isPassenger = currentUser?.isDriver != true ||
+        (trip.passengerId.isNotEmpty && currentUser?.id == trip.passengerId);
+    if (isPassenger &&
+        trip.rating == null &&
+        _autoPromptedModalRideId != trip.id &&
+        AppState.instance.shouldPromptRatingFor(trip.id)) {
+      _autoPromptedModalRideId = trip.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(RateDriverModal.show(context, trip: trip));
+      });
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.canvasColor(dark),
+      appBar: AppBar(
+        title: const Text('Ride Completed'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => widget.onNavigate(AppScreen.rides),
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 80,
-                  height: 80,
+                  width: 76,
+                  height: 76,
                   decoration: BoxDecoration(
                     color: Colors.green.withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.check_circle_rounded,
-                    size: 48,
+                    size: 46,
                     color: Colors.green,
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 Text(
                   'Ride Completed!',
+                  textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -1078,38 +1113,67 @@ class _RideTrackingState extends State<RideTracking> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
-                      Column(
-                        children: [
-                          Text('Fare Paid',
-                              style: TextStyle(
-                                  color: AppColors.subtextColor(dark),
-                                  fontSize: 12)),
-                          const SizedBox(height: 4),
-                          Text('₱${trip.fare.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: AppColors.textColor(dark))),
-                        ],
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Fare Paid',
+                                style: TextStyle(
+                                    color: AppColors.subtextColor(dark),
+                                    fontSize: 12)),
+                            const SizedBox(height: 4),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('₱${trip.fare.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: AppColors.textColor(dark))),
+                            ),
+                          ],
+                        ),
                       ),
-                      Column(
-                        children: [
-                          Text('Distance',
-                              style: TextStyle(
-                                  color: AppColors.subtextColor(dark),
-                                  fontSize: 12)),
-                          const SizedBox(height: 4),
-                          Text('${trip.distanceKm.toStringAsFixed(1)} km',
-                              style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: AppColors.textColor(dark))),
-                        ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            Text('Distance',
+                                style: TextStyle(
+                                    color: AppColors.subtextColor(dark),
+                                    fontSize: 12)),
+                            const SizedBox(height: 4),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                  '${trip.distanceKm.toStringAsFixed(1)} km',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: AppColors.textColor(dark))),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
+                if (isPassenger && trip.rating == null) ...[
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD97706),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () =>
+                        RateDriverModal.show(context, trip: trip, force: true),
+                    icon: const Icon(Icons.star_rounded),
+                    label: const Text('Rate Your Driver'),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.terracotta,
@@ -1127,7 +1191,9 @@ class _RideTrackingState extends State<RideTracking> {
             ),
           ),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _cancelledScreen(BuildContext context, Trip trip, bool dark) =>
       Scaffold(

@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:sakay_ta/core/constants.dart';
 import 'package:sakay_ta/l10n/app_localizations.dart';
 import 'package:sakay_ta/main.dart' hide Brand, Avatar;
+import 'package:sakay_ta/models/app_user.dart';
 import 'package:sakay_ta/models/saved_place.dart';
 import 'package:sakay_ta/pages/my_rides.dart';
 import 'package:sakay_ta/pages/passenger_profile.dart';
@@ -19,8 +20,9 @@ import 'package:sakay_ta/widgets/passenger_bottom_nav.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() {
+  setUp(() async {
     SharedPreferences.setMockInitialValues({});
+    await PrefsService.initialize();
   });
 
   group('PaymentService Tests', () {
@@ -87,14 +89,12 @@ void main() {
   });
 
   group('SavedPlacesService Tests', () {
-    test('Initializes with default Home and Work places', () async {
+    test('Initializes with empty places or loads stored places', () async {
       final service = SavedPlacesService.instance;
       await service.init('test_user_123');
 
-      expect(service.places.length, greaterThanOrEqualTo(2));
-      expect(service.places.any((p) => p.name == 'Home'), isTrue);
-      expect(service.places.any((p) => p.name == 'Work'), isTrue);
-      expect(service.summary, contains('Home'));
+      expect(service.places, isA<List<SavedPlace>>());
+      expect(service.summary, contains('No saved places'));
     });
 
     test('Can add, update and delete a saved place', () async {
@@ -120,6 +120,38 @@ void main() {
 
       await service.deletePlace('test_user_123', 'place_school_1');
       expect(service.places.any((p) => p.id == 'place_school_1'), isFalse);
+    });
+
+    test('Serializes to database row and deserializes from Supabase schema', () {
+      final now = DateTime.now();
+      final place = SavedPlace(
+        id: 'place_123',
+        userId: 'user_456',
+        name: 'Home',
+        address: '123 Main St, Cebu City',
+        geo: const Geo(10.3157, 123.8854),
+        category: 'home',
+        createdAt: now,
+      );
+
+      final row = place.toDatabaseRow();
+      expect(row['id'], equals('place_123'));
+      expect(row['user_id'], equals('user_456'));
+      expect(row['name'], equals('Home'));
+      expect(row['address'], equals('123 Main St, Cebu City'));
+      expect(row['latitude'], equals(10.3157));
+      expect(row['longitude'], equals(123.8854));
+      expect(row['category'], equals('home'));
+      expect(row['created_at'], isA<String>());
+
+      final restored = SavedPlace.fromMap(row);
+      expect(restored.id, equals(place.id));
+      expect(restored.userId, equals(place.userId));
+      expect(restored.name, equals(place.name));
+      expect(restored.address, equals(place.address));
+      expect(restored.geo.lat, equals(place.geo.lat));
+      expect(restored.geo.lng, equals(place.geo.lng));
+      expect(restored.category, equals(place.category));
     });
   });
 
@@ -194,8 +226,17 @@ void main() {
       expect(navigatedScreen, equals(AppScreen.passengerHome));
     });
 
-    testWidgets('PassengerProfile renders profile, Trusted Passenger badge, Stats, Settings, and Log Out',
+    testWidgets('PassengerProfile renders profile, Passenger badge, Stats, Settings, and Log Out',
         (tester) async {
+      AppState.instance.currentUser = AppUser(
+        id: 'test_passenger_123',
+        fullName: 'Maria Santos',
+        email: 'maria@example.com',
+        passwordHash: 'dummy',
+        role: UserRole.passenger,
+        createdAt: DateTime.now(),
+      );
+
       await tester.pumpWidget(
         MultiProvider(
           providers: [
@@ -221,13 +262,13 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Profile'), findsWidgets);
-      expect(find.text('Trusted Passenger'), findsOneWidget);
+      expect(find.text('Passenger'), findsOneWidget);
       expect(find.text('Total Rides'), findsOneWidget);
       expect(find.text('Joined Since'), findsOneWidget);
       expect(find.text('Account Settings'), findsOneWidget);
       expect(find.text('Edit Profile'), findsOneWidget);
-      expect(find.text('Payment Methods'), findsOneWidget);
       expect(find.text('Saved Places'), findsOneWidget);
+      expect(find.text('Change Password'), findsOneWidget);
       expect(find.text('Preferences & Support'), findsOneWidget);
       expect(find.text('Language'), findsOneWidget);
       expect(find.text('Help Center'), findsOneWidget);

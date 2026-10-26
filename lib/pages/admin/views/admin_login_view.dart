@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants.dart';
-import '../../../services/supabase_service.dart';
+
 import '../../../state/app_state.dart';
 import '../../password_recovery_page.dart';
 import '../admin_theme.dart';

@@ -20,8 +20,9 @@ class OsmMapService implements IMapGeocodingService, IMapRoutingService {
   static final OsmMapService instance = OsmMapService();
   final http.Client _client;
 
-  // 3-second timeout for responsive behavior on limited/2G/3G networks
-  static const Duration _timeout = Duration(milliseconds: 3000);
+  // 5-second timeout: rural 2G/3G round-trips to OSM/OSRM servers abroad
+  // regularly exceed 3s. Cached results are always tried first.
+  static const Duration _timeout = Duration(milliseconds: 5000);
   static const String _nominatimHost = 'nominatim.openstreetmap.org';
   static const String _osrmHost = 'router.project-osrm.org';
   static const String _userAgent =
@@ -78,7 +79,9 @@ class OsmMapService implements IMapGeocodingService, IMapRoutingService {
         _autocompleteCache[cacheKey] = cachedList;
         return cachedList;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('OsmMapService non-fatal note: $e');
+    }
 
     // 3. Query network with fast timeout
     try {
@@ -239,7 +242,9 @@ class OsmMapService implements IMapGeocodingService, IMapRoutingService {
           decoded['placeId'] as String?,
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('OsmMapService non-fatal note: $e');
+    }
 
     try {
       final response = await _client.get(
@@ -314,7 +319,9 @@ class OsmMapService implements IMapGeocodingService, IMapRoutingService {
         _reverseGeocodeCache[cacheKey] = cached;
         return cached;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('OsmMapService non-fatal note: $e');
+    }
 
     try {
       final response = await _client.get(
@@ -476,7 +483,9 @@ class OsmMapService implements IMapGeocodingService, IMapRoutingService {
         _routeCache[cacheKey] = details;
         return details;
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('OsmMapService non-fatal note: $e');
+    }
 
     try {
       final coordinates =

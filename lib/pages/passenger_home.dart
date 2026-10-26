@@ -14,6 +14,7 @@ import '../widgets/common.dart';
 import '../widgets/connectivity_banner.dart';
 import '../widgets/driver_matching_bottom_sheet.dart';
 import '../widgets/live_osm_map_widget.dart';
+import '../widgets/rate_driver_modal.dart';
 import '../widgets/map_export_modal.dart';
 import '../widgets/passenger_bottom_nav.dart';
 import '../widgets/user_avatar.dart';
@@ -40,6 +41,7 @@ class _PassengerHomeState extends State<PassengerHome> {
   void initState() {
     super.initState();
     _searchBloc = PassengerSearchBloc();
+    AppState.instance.addListener(_onAppStateChanged);
     _searchSub = _searchBloc.stream.listen((state) {
       final error = state.errorMessage;
       if (error != null && mounted && error != _lastShownError) {
@@ -60,8 +62,14 @@ class _PassengerHomeState extends State<PassengerHome> {
     });
   }
 
+  void _onAppStateChanged() {
+    if (!mounted) return;
+    _searchBloc.recomputeFares();
+  }
+
   @override
   void dispose() {
+    AppState.instance.removeListener(_onAppStateChanged);
     _minuteTicker?.cancel();
     _searchSub?.cancel();
     _searchCtrl.dispose();
@@ -271,9 +279,19 @@ class _PassengerHomeState extends State<PassengerHome> {
     final app = context.watch<AppState>();
     final isDark =
         app.darkMode || Theme.of(context).brightness == Brightness.dark;
+    final currentLocaleCode =
+        context.watch<LocaleProvider>().locale.languageCode;
     final media = MediaQuery.of(context);
     final isDesktop = media.size.width > 768;
     final currentUser = app.currentUser;
+    final pendingRatingTrip = app.pendingRatingTrip;
+    if (pendingRatingTrip != null &&
+        app.shouldPromptRatingFor(pendingRatingTrip.id)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(RateDriverModal.show(context, trip: pendingRatingTrip));
+      });
+    }
 
     return StreamBuilder<PassengerSearchState>(
       stream: _searchBloc.stream,
@@ -573,12 +591,16 @@ class _PassengerHomeState extends State<PassengerHome> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   // Time-Aware Dynamic Greeting
-                                  Text(
-                                    '${TimeGreeting.getLocalizedGreeting(localeCode: context.watch<LocaleProvider>().locale.languageCode)}!',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      color: AppColors.textColor(isDark),
+                                  Expanded(
+                                    child: Text(
+                                      '${TimeGreeting.getLocalizedGreeting(localeCode: currentLocaleCode)}!',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.textColor(isDark),
+                                      ),
                                     ),
                                   ),
                                   // Map Export / Share Action Button

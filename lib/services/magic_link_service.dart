@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'package:sqflite_common_ffi/sqflite_ffi.dart' as ffi;
 
 import '../core/logger.dart';
