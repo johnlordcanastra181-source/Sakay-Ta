@@ -6,6 +6,7 @@ import '../core/constants.dart';
 import '../l10n/app_localizations.dart';
 import '../main.dart' hide Brand, Avatar;
 import '../models/trip.dart';
+import '../services/fare_calculator.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
 import '../widgets/passenger_bottom_nav.dart';
@@ -321,7 +322,7 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                 ),
               ),
               Text(
-                '₱${trip.fare.toStringAsFixed(2)}',
+                FareCalculator.formatFare(trip.fare),
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w900,
@@ -757,7 +758,7 @@ class _MyRidesState extends State<MyRides> with SingleTickerProviderStateMixin {
                 ),
               ),
               Text(
-                '₱${trip.fare.toStringAsFixed(2)}',
+                FareCalculator.formatFare(trip.fare),
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w900,

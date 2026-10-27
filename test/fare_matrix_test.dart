@@ -64,14 +64,14 @@ void main() {
 
       // At 2.8 km: chargeable is 2.8 - 2.5 = 0.3 km
       // Distance charge = 0.3 * 5.5 = 1.65
-      // Total fare = 15.0 + 1.65 = 16.65
+      // Total fare = 15.0 + 1.65 = 16.65 -> rounds up to 17.0 (.50+ rule)
       final fare = FareCalculator.calculateFare(
         matrix: tricycleMatrix,
         distanceKm: 2.8,
         durationMinutes: 0,
       );
 
-      expect(fare, 16.65);
+      expect(fare, 17.0);
       expect(fare, greaterThan(15.0));
     });
 
@@ -198,6 +198,21 @@ void main() {
 
       expect(fare, 35.0);
       expect(fare, equals(15 + (5 - 1) * 5));
+    });
+
+    test('Automatic half-up rounding rule (.50+ rounds up, <.50 rounds down)', () {
+      expect(FareCalculator.roundFare(45.45), 45.0);
+      expect(FareCalculator.roundFare(45.49), 45.0);
+      expect(FareCalculator.roundFare(45.50), 46.0);
+      expect(FareCalculator.roundFare(45.51), 46.0);
+      expect(FareCalculator.roundFare(220.40), 220.0);
+      expect(FareCalculator.roundFare(220.50), 221.0);
+      expect(FareCalculator.roundFare(172.00), 172.0);
+
+      expect(FareCalculator.formatFare(45.45), '₱45');
+      expect(FareCalculator.formatFare(45.50), '₱46');
+      expect(FareCalculator.formatFare(220.40), '₱220');
+      expect(FareCalculator.formatFare(172.00), '₱172');
     });
   });
 }

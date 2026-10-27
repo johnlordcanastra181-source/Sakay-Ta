@@ -15,6 +15,7 @@ import '../main.dart';
 import '../models/app_user.dart';
 import '../models/driver_profile.dart';
 import '../models/trip.dart';
+import '../services/fare_calculator.dart';
 import '../services/supabase_service.dart';
 import '../services/osm_map_service.dart';
 import '../state/app_state.dart';
@@ -488,7 +489,7 @@ class _RideTrackingState extends State<RideTracking> {
                             ),
                           ),
                           Text(
-                            '₱${trip.fare.toStringAsFixed(2)}',
+                            FareCalculator.formatFare(trip.fare),
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -1123,7 +1124,7 @@ class _RideTrackingState extends State<RideTracking> {
                             const SizedBox(height: 4),
                             FittedBox(
                               fit: BoxFit.scaleDown,
-                              child: Text('₱${trip.fare.toStringAsFixed(2)}',
+                              child: Text(FareCalculator.formatFare(trip.fare),
                                   style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,

@@ -3,6 +3,7 @@ import '../core/constants.dart';
 import '../core/theme.dart';
 import '../models/payment_method_model.dart';
 import '../services/driver_matching_service.dart';
+import '../services/fare_calculator.dart';
 import '../services/payment_service.dart';
 import 'user_avatar.dart';
 
@@ -380,9 +381,7 @@ class _BookingConfirmationModalState extends State<BookingConfirmationModal> {
                               color: AppColors.subtextColor(isDark))),
                       const SizedBox(height: 2),
                       Text(
-                        widget.fare % 1 == 0
-                            ? '₱${widget.fare.toInt()}'
-                            : '₱${widget.fare.toStringAsFixed(2)}',
+                        FareCalculator.formatFare(widget.fare),
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.w900,

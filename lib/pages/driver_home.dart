@@ -12,6 +12,7 @@ import '../models/app_user.dart';
 import '../models/firestore_models.dart';
 import '../models/trip.dart';
 import '../services/driver_earnings_summary.dart';
+import '../services/fare_calculator.dart';
 import '../services/supabase_service.dart';
 import '../state/app_state.dart';
 import '../widgets/connectivity_banner.dart';
@@ -1078,9 +1079,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          trip.fare % 1 == 0
-                              ? '₱${trip.fare.toInt()}'
-                              : '₱${trip.fare.toStringAsFixed(2)}',
+                          FareCalculator.formatFare(trip.fare),
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w900,
@@ -1448,7 +1447,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '₱${trip.fare.toStringAsFixed(2)}',
+                      FareCalculator.formatFare(trip.fare),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w800,
@@ -1551,7 +1550,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Awaiting passenger $providerName payment (${trip.fare % 1 == 0 ? "₱${trip.fare.toInt()}" : "₱${trip.fare.toStringAsFixed(2)}"})',
+                            'Awaiting passenger $providerName payment (${FareCalculator.formatFare(trip.fare)})',
                             style: TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,

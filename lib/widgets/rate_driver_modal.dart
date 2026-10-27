@@ -6,6 +6,7 @@ import '../core/neumorphic_theme.dart';
 import '../models/app_user.dart';
 import '../models/driver_profile.dart';
 import '../models/trip.dart';
+import '../services/fare_calculator.dart';
 import '../services/supabase_service.dart';
 import '../state/app_state.dart';
 import 'neumorphic_widgets.dart';
@@ -337,7 +338,7 @@ class _RateDriverModalState extends State<RateDriverModal> {
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          '₱${widget.trip.fare.toStringAsFixed(0)}',
+                          FareCalculator.formatFare(widget.trip.fare),
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w900,

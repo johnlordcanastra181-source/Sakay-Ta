@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../core/constants.dart';
 import '../core/theme.dart';
+import '../services/fare_calculator.dart';
 import '../state/app_state.dart';
 
 class RideDetailsModal extends StatelessWidget {
@@ -335,7 +336,7 @@ class RideDetailsModal extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '₱${trip.fare.toStringAsFixed(2)}',
+                        FareCalculator.formatFare(trip.fare),
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w900,

@@ -1,4 +1,5 @@
 import '../core/constants.dart';
+import '../services/fare_calculator.dart';
 
 class Booking {
   final String id;
@@ -328,7 +329,7 @@ class Trip {
       distanceKm:
           dblVal(['distance_km', 'distanceKm'], Geo.distanceKm(pickup, dropoff)),
       durationMin: intVal(['duration_min', 'duration_minutes', 'durationMin']),
-      fare: dblVal(['fare']),
+      fare: FareCalculator.roundFare(dblVal(['fare'])),
       commission: dblVal(['commission']),
       net: dblVal(['net']),
       status: RideStatus.normalize(map['status']?.toString()),

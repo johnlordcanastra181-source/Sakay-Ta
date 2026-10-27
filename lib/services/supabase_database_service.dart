@@ -1672,6 +1672,7 @@ class SupabaseDatabaseService {
           ),
         ],
         fetch: () async {
+          // 1. Check for ongoing active ride (searching, accepted, arrived, started)
           final rows = await _client
               .from('rides')
               .select(_rideWithRatingSelect)
@@ -1679,8 +1680,25 @@ class SupabaseDatabaseService {
               .inFilter('status', kActiveRideStatuses.toList())
               .order('created_at', ascending: false)
               .limit(1);
-          if (rows.isEmpty) return null;
-          return _trip(Map<String, dynamic>.from(rows.first));
+          if (rows.isNotEmpty) {
+            return _trip(Map<String, dynamic>.from(rows.first));
+          }
+
+          // 2. Check for the most recently completed ride that has not been rated yet
+          final completedRows = await _client
+              .from('rides')
+              .select(_rideWithRatingSelect)
+              .eq('passenger_id', passengerId)
+              .eq('status', RideStatus.completed)
+              .order('created_at', ascending: false)
+              .limit(1);
+          if (completedRows.isNotEmpty) {
+            final latest = _trip(Map<String, dynamic>.from(completedRows.first));
+            if (latest.rating == null) {
+              return latest;
+            }
+          }
+          return null;
         },
         pollInterval: const Duration(seconds: 3),
       );

@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
 import '../models/trip.dart';
+import '../services/fare_calculator.dart';
 import '../services/online_payment_gateway.dart';
 import '../services/payment_service.dart';
 import '../state/app_state.dart';
@@ -360,7 +361,7 @@ class _OnlineCheckoutModalState extends State<OnlineCheckoutModal> {
               ),
               const SizedBox(height: 4),
               Text(
-                '₱${widget.trip.fare.toStringAsFixed(2)}',
+                FareCalculator.formatFare(widget.trip.fare),
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
@@ -572,7 +573,7 @@ class _OnlineCheckoutModalState extends State<OnlineCheckoutModal> {
               Divider(height: 16, color: AppColors.borderColor(isDark)),
               _buildReceiptRow(
                 'Total Paid',
-                '₱${widget.trip.fare.toStringAsFixed(2)}',
+                FareCalculator.formatFare(widget.trip.fare),
                 valueColor:
                     isDark ? AppColors.emeraldVibrant : const Color(0xFF16A34A),
                 isBold: true,

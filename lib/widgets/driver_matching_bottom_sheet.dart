@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/constants.dart';
 import '../core/theme.dart';
 import '../services/driver_matching_service.dart';
+import '../services/fare_calculator.dart';
 import 'user_avatar.dart';
 
 class DriverMatchingBottomSheet extends StatelessWidget {
@@ -305,9 +306,7 @@ class DriverMatchingBottomSheet extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            currentFare % 1 == 0
-                                ? '₱${currentFare.toInt()}'
-                                : '₱${currentFare.toStringAsFixed(2)}',
+                            FareCalculator.formatFare(currentFare),
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w900,
@@ -404,7 +403,7 @@ class DriverMatchingBottomSheet extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${fare % 1 == 0 ? '₱${fare.toInt()}' : '₱${fare.toStringAsFixed(2)}'} · $subtitle',
+                  '${FareCalculator.formatFare(fare)} · $subtitle',
                   style: TextStyle(
                     fontSize: 11,
                     color: isSelected

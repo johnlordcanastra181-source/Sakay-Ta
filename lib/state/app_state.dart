@@ -1330,6 +1330,12 @@ class AppState extends ChangeNotifier {
               lastEmittedActiveTrip = cloudTrip;
               if (currentUser?.id == passengerId) {
                 activeTrip = cloudTrip;
+                if (RideStatus.normalize(cloudTrip.status) ==
+                        RideStatus.completed &&
+                    cloudTrip.rating == null &&
+                    shouldPromptRatingFor(cloudTrip.id)) {
+                  pendingRatingTrip = cloudTrip;
+                }
               }
               if (!controller.isClosed) {
                 controller.add(cloudTrip);

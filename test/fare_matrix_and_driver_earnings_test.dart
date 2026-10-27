@@ -36,35 +36,37 @@ void main() {
       expect(habalMatrix.commissionPercent, 0.0);
 
       // Verify 7.5 km trip fare calculation matches formula: baseFare + (dist - included) * rate
+      // 10.0 + (7.5 - 2.0) * 5 = 37.5 -> rounds up to 38.0 (.50+ rule)
       final tricycleFare = FareCalculator.calculateFare(
         matrix: tricycleMatrix,
         distanceKm: 7.5,
         durationMinutes: 0,
       );
-      expect(tricycleFare, 37.5); // 10.0 + (7.5 - 2.0) * 5 = 37.5
+      expect(tricycleFare, 38.0);
 
+      // 20.0 + 7.5 * 5 = 57.5 -> rounds up to 58.0 (.50+ rule)
       final habalFare = FareCalculator.calculateFare(
         matrix: habalMatrix,
         distanceKm: 7.5,
         durationMinutes: 0,
       );
-      expect(habalFare, 57.5); // 20.0 + 7.5 * 5 = 57.5
+      expect(habalFare, 58.0);
 
       // Also verify via RideConfig & DriverMatchingService
-      expect(RideConfig.fareFor(VehicleType.tricycle, 7.5), 37.5);
-      expect(RideConfig.fareFor(VehicleType.habal, 7.5), 57.5);
+      expect(RideConfig.fareFor(VehicleType.tricycle, 7.5), 38.0);
+      expect(RideConfig.fareFor(VehicleType.habal, 7.5), 58.0);
       expect(
           DriverMatchingService.instance.calculateFare(
             vehicleType: VehicleType.tricycle,
             distanceKm: 7.5,
           ),
-          37.5);
+          38.0);
       expect(
           DriverMatchingService.instance.calculateFare(
             vehicleType: VehicleType.habal,
             distanceKm: 7.5,
           ),
-          57.5);
+          58.0);
     });
 
     test('Trip creation sets 100% of fare as driver earnings with 0 commission',
