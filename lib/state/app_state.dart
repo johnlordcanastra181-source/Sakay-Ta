@@ -183,6 +183,24 @@ class AppState extends ChangeNotifier {
   String? pendingDriverApplicationRejectionReason;
   String? pendingDriverApplicationStatusError;
   Trip? activeTrip;
+  List<Trip> activeTrips = [];
+
+  int get activePassengersCount => activeTrips.fold(
+      0, (sum, t) => sum + (t.passengerCount > 0 ? t.passengerCount : 1));
+
+  int get maxCapacity {
+    final vType = driverProfile?.vehicleType;
+    if (vType == VehicleType.habal) {
+      return 1;
+    }
+    return 4;
+  }
+
+  int get availableSeats =>
+      (maxCapacity - activePassengersCount).clamp(0, maxCapacity);
+
+  bool get hasCapacityForMore => availableSeats > 0;
+
   List<WalletTransaction> transactions = [];
   List<ChatMessage> chatMessages = [];
   List<AppNotification> notificationList = [];
@@ -196,6 +214,7 @@ class AppState extends ChangeNotifier {
   StreamSubscription? _fareMatrixSub;
   StreamSubscription<AppUser?>? _userSub;
   StreamSubscription<Trip?>? _activeTripSub;
+  StreamSubscription<List<Trip>>? _activeTripsSub;
   StreamSubscription<List<FireRating>>? _driverRatingsSub;
 
   /// Last known driver coordinates (used when a trip starts so the rides
@@ -590,17 +609,27 @@ class AppState extends ChangeNotifier {
       }
     });
 
-    final tripStream = user.isDriver
-        ? SupabaseService.instance
-            .streamActiveTripForDriver((user as dynamic).id)
-        : SupabaseService.instance
-            .streamActiveTripForPassenger((user as dynamic).id);
+    if (user.isDriver) {
+      _activeTripsSub = SupabaseService.instance
+          .streamActiveTripsForDriver((user as dynamic).id)
+          .listen((tripList) {
+        if (currentUser?.id == (user as dynamic).id) {
+          activeTrips = tripList;
+          activeTrip = tripList.firstOrNull;
+          notifyListeners();
+        }
+      }, onError: (Object error) {
+        debugPrint('[RideTracking] driver active trips listener error: $error');
+      });
+    } else {
+      final tripStream = SupabaseService.instance
+          .streamActiveTripForPassenger((user as dynamic).id);
 
-    _activeTripSub = tripStream.listen((trip) {
-      if (currentUser?.id == (user as dynamic).id) {
-        final previousTrip = activeTrip;
-        activeTrip = trip;
-        if (!user.isDriver) {
+      _activeTripSub = tripStream.listen((trip) {
+        if (currentUser?.id == (user as dynamic).id) {
+          final previousTrip = activeTrip;
+          activeTrip = trip;
+          activeTrips = trip == null ? [] : [trip];
           if (trip != null &&
               RideStatus.normalize(trip.status) == RideStatus.completed &&
               trip.rating == null &&
@@ -619,12 +648,12 @@ class AppState extends ChangeNotifier {
               }
             }).catchError((Object _) {}));
           }
+          notifyListeners();
         }
-        notifyListeners();
-      }
-    }, onError: (Object error) {
-      debugPrint('[RideTracking] active ride listener error: $error');
-    });
+      }, onError: (Object error) {
+        debugPrint('[RideTracking] active ride listener error: $error');
+      });
+    }
 
     if (user.isDriver) {
       _driverRatingsSub = SupabaseService.instance
@@ -643,6 +672,8 @@ class AppState extends ChangeNotifier {
     _userSub = null;
     _activeTripSub?.cancel();
     _activeTripSub = null;
+    _activeTripsSub?.cancel();
+    _activeTripsSub = null;
     _driverRatingsSub?.cancel();
     _driverRatingsSub = null;
   }
@@ -1462,53 +1493,54 @@ class AppState extends ChangeNotifier {
 
   /// Stream of the driver's active trip with Firestore + local SQLite fallback.
   Stream<Trip?> streamActiveTripForDriver(String driverId) {
+    return streamActiveTripsForDriver(driverId).map((list) => list.firstOrNull);
+  }
+
+  /// Stream of all active trips for a multi-passenger driver (e.g. Tricycle up to 4 pax).
+  Stream<List<Trip>> streamActiveTripsForDriver(String driverId) {
     if (!SupabaseService.isConfigured) {
-      return _localNotifyingStream(() => trips.activeTripForDriver(driverId));
+      return _localNotifyingStream(() => trips.activeTripsForDriver(driverId));
     }
     if (currentUser?.id == driverId) {
       return _localNotifyingStream(() async {
-        final trip = activeTrip;
-        return trip?.driverId == driverId && trip?.isActive == true
-            ? trip
-            : null;
+        return activeTrips
+            .where((t) => t.driverId == driverId && t.isActive)
+            .toList();
       });
     }
-    return Stream<Trip?>.multi((controller) {
-      StreamSubscription<Trip?>? cloudSub;
-      StreamSubscription<Trip?>? localSub;
+    return Stream<List<Trip>>.multi((controller) {
+      StreamSubscription<List<Trip>>? cloudSub;
+      StreamSubscription<List<Trip>>? localSub;
       var hasEmittedFromCloud = false;
 
-      // 1. Immediately emit in-memory active trip or local DB trip if matching
-      if (activeTrip?.driverId == driverId && activeTrip?.isActive == true) {
-        if (!controller.isClosed) controller.add(activeTrip);
+      if (currentUser?.id == driverId && activeTrips.isNotEmpty) {
+        if (!controller.isClosed) controller.add(activeTrips);
       } else {
-        trips.activeTripForDriver(driverId).then((localTrip) {
-          if (!controller.isClosed &&
-              !hasEmittedFromCloud &&
-              localTrip != null) {
-            controller.add(localTrip);
+        trips.activeTripsForDriver(driverId).then((localTrips) {
+          if (!controller.isClosed && !hasEmittedFromCloud && localTrips.isNotEmpty) {
+            controller.add(localTrips);
           }
         }).catchError((_) {});
       }
 
-      // 2. Listen to Firestore cloud stream with local fallback on error
       try {
-        cloudSub =
-            SupabaseService.instance.streamActiveTripForDriver(driverId).listen(
-          (cloudTrip) {
+        cloudSub = SupabaseService.instance
+            .streamActiveTripsForDriver(driverId)
+            .listen(
+          (cloudTrips) {
             hasEmittedFromCloud = true;
             if (!controller.isClosed) {
-              controller.add(cloudTrip);
+              controller.add(cloudTrips);
             }
           },
           onError: (Object error) {
             debugPrint(
-                '[SakayTa][RideTracking] driver active trip cloud stream note: $error');
+                '[SakayTa][RideTracking] driver active trips cloud stream note: $error');
             if (!controller.isClosed && localSub == null) {
               localSub = _localNotifyingStream(
-                () => trips.activeTripForDriver(driverId),
-              ).listen((localTrip) {
-                if (!controller.isClosed) controller.add(localTrip);
+                () => trips.activeTripsForDriver(driverId),
+              ).listen((localTrips) {
+                if (!controller.isClosed) controller.add(localTrips);
               }, onError: (Object err) {
                 if (!controller.isClosed) controller.addError(err);
               });
@@ -1517,12 +1549,12 @@ class AppState extends ChangeNotifier {
         );
       } catch (e) {
         debugPrint(
-            '[SakayTa][RideTracking] failed to attach driver cloud stream: $e');
+            '[SakayTa][RideTracking] failed to attach driver cloud trips stream: $e');
         if (!controller.isClosed && localSub == null) {
           localSub = _localNotifyingStream(
-            () => trips.activeTripForDriver(driverId),
-          ).listen((localTrip) {
-            if (!controller.isClosed) controller.add(localTrip);
+            () => trips.activeTripsForDriver(driverId),
+          ).listen((localTrips) {
+            if (!controller.isClosed) controller.add(localTrips);
           }, onError: (Object err) {
             if (!controller.isClosed) controller.addError(err);
           });
@@ -3486,7 +3518,11 @@ class AppState extends ChangeNotifier {
         status: RideStatus.accepted,
         acceptedAt: DateTime.now(),
       );
-      activeTrip = acceptedTrip;
+      activeTrips = [
+        ...activeTrips.where((t) => t.id != acceptedTrip.id),
+        acceptedTrip,
+      ];
+      activeTrip = activeTrips.firstOrNull ?? acceptedTrip;
       _stableIncomingTripsByDriver[user.id]
           ?.removeWhere((candidate) => candidate.id == trip.id);
       _traceDriverRequest(
@@ -3605,6 +3641,7 @@ class AppState extends ChangeNotifier {
     double? distanceKm,
     int? durationMin,
     String? driverId,
+    int passengerCount = 1,
   }) async {
     final user = currentUser;
     if (user == null) return null;
@@ -3646,6 +3683,7 @@ class AppState extends ChangeNotifier {
           estimatedFare: estimatedFare,
           distanceKm: distanceKm,
           durationMin: durationMin,
+          passengerCount: passengerCount,
         );
         if (activeTrip != null) {
           debugPrint('[SakayTa][Booking] rideId=${activeTrip!.id} '
@@ -3678,6 +3716,7 @@ class AppState extends ChangeNotifier {
           distanceKm: distanceKm,
           durationMin: durationMin,
           queued: true,
+          passengerCount: passengerCount,
         );
 
         // Record in sync queue for automatic cloud synchronization
@@ -3755,8 +3794,13 @@ class AppState extends ChangeNotifier {
   }
 
   /// Driver confirms arrival at the pickup point.
-  Future<bool> arriveAtPickup() async {
-    final trip = activeTrip;
+  Future<bool> arriveAtPickup({String? tripId}) async {
+    final trip = (tripId != null
+            ? activeTrips
+                .cast<Trip?>()
+                .firstWhere((t) => t?.id == tripId, orElse: () => null)
+            : null) ??
+        activeTrip;
     final driver = currentUser;
     if (trip == null || driver == null || !driver.isDriver) return false;
     if (trip.driverId != driver.id) return false;
@@ -3805,19 +3849,29 @@ class AppState extends ChangeNotifier {
       pendingSyncCount = await sync.pendingCount();
     }
     await trips.setStatusLocally(trip.id, RideStatus.arrived);
-    activeTrip = trip.copyWith(
+    final updatedTrip = trip.copyWith(
       status: RideStatus.arrived,
       arrivedAt: DateTime.now(),
     );
+    activeTrips = [
+      ...activeTrips.where((t) => t.id != trip.id),
+      updatedTrip,
+    ];
+    activeTrip = activeTrips.firstOrNull ?? updatedTrip;
     notifyListeners();
     await refreshTrips();
     return true;
   }
 
   /// Starts an arrived ride once, after validating role and ownership.
-  Future<bool> startActiveTrip() async {
+  Future<bool> startActiveTrip({String? tripId}) async {
     if (_startingActiveTrip) return false;
-    final trip = activeTrip;
+    final trip = (tripId != null
+            ? activeTrips
+                .cast<Trip?>()
+                .firstWhere((t) => t?.id == tripId, orElse: () => null)
+            : null) ??
+        activeTrip;
     final driver = currentUser;
     if (trip == null ||
         driver == null ||
@@ -3877,10 +3931,15 @@ class AppState extends ChangeNotifier {
         pendingSyncCount = await sync.pendingCount();
       }
       await trips.setStatusLocally(trip.id, RideStatus.started);
-      activeTrip = trip.copyWith(
+      final updatedTrip = trip.copyWith(
         status: RideStatus.started,
         startedAt: DateTime.now(),
       );
+      activeTrips = [
+        ...activeTrips.where((t) => t.id != trip.id),
+        updatedTrip,
+      ];
+      activeTrip = activeTrips.firstOrNull ?? updatedTrip;
       notifyListeners();
       await refreshTrips();
       return true;
@@ -3899,12 +3958,18 @@ class AppState extends ChangeNotifier {
   /// `confirmed` means Supabase returned the completed, owned ride. The
   /// offline result is deliberately separate so the UI never claims that
   /// server earnings were recorded before the sync queue reaches Supabase.
-  Future<TripCompletionResult> completeTrip({required bool onTime}) async {
+  Future<TripCompletionResult> completeTrip(
+      {required bool onTime, String? tripId}) async {
     if (_completingActiveTrip) {
       throw StateError('Trip completion is already in progress.');
     }
 
-    final trip = activeTrip;
+    final trip = (tripId != null
+            ? activeTrips
+                .cast<Trip?>()
+                .firstWhere((t) => t?.id == tripId, orElse: () => null)
+            : null) ??
+        activeTrip;
     final driver = currentUser;
     if (trip == null ||
         driver == null ||
@@ -3953,7 +4018,8 @@ class AppState extends ChangeNotifier {
       }
 
       await trips.setStatusLocally(trip.id, RideStatus.completed);
-      activeTrip = null;
+      activeTrips = activeTrips.where((t) => t.id != trip.id).toList();
+      activeTrip = activeTrips.firstOrNull;
       notifyListeners();
 
       if (confirmedOnServer) {

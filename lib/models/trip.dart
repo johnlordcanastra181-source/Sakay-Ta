@@ -11,6 +11,7 @@ class Booking {
   final String paymentMethod;
   final String status;
   final bool queued;
+  final int passengerCount;
   final DateTime createdAt;
 
   const Booking({
@@ -24,6 +25,7 @@ class Booking {
     this.paymentMethod = PaymentMethod.cash,
     this.status = 'requested',
     this.queued = false,
+    this.passengerCount = 1,
     required this.createdAt,
   });
 
@@ -40,6 +42,7 @@ class Booking {
         'payment_method': paymentMethod,
         'status': status,
         'queued': queued ? 1 : 0,
+        'passenger_count': passengerCount,
         'created_at': createdAt.millisecondsSinceEpoch,
       };
 
@@ -86,6 +89,7 @@ class Booking {
               .toString(),
       status: (map['status'] ?? 'requested').toString(),
       queued: map['queued'] == true || map['queued'] == 1,
+      passengerCount: ((map['passenger_count'] ?? map['passengerCount'] ?? 1) as num?)?.toInt() ?? 1,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         (map['created_at'] as int?) ?? 0,
       ),
@@ -120,6 +124,7 @@ class Trip {
   final int? rating;
   final String? ratingComment;
   final bool queued;
+  final int passengerCount;
 
   const Trip({
     required this.id,
@@ -148,6 +153,7 @@ class Trip {
     this.rating,
     this.ratingComment,
     this.queued = false,
+    this.passengerCount = 1,
   });
 
   bool get isActive => RideStatus.isActive(status);
@@ -180,6 +186,7 @@ class Trip {
     DateTime? completedAt,
     int? rating,
     String? ratingComment,
+    int? passengerCount,
   }) {
     return Trip(
       id: id,
@@ -208,6 +215,7 @@ class Trip {
       rating: rating ?? this.rating,
       ratingComment: ratingComment ?? this.ratingComment,
       queued: queued,
+      passengerCount: passengerCount ?? this.passengerCount,
     );
   }
 
@@ -240,6 +248,7 @@ class Trip {
         'rating': rating,
         'rating_comment': ratingComment,
         'queued': queued ? 1 : 0,
+        'passenger_count': passengerCount,
       };
 
   factory Trip.fromMap(Map<String, Object?> map) {
@@ -336,6 +345,7 @@ class Trip {
       rating: intVal(['rating'], 0) > 0 ? intVal(['rating']) : null,
       ratingComment: map['rating_comment']?.toString(),
       queued: map['queued'] == true || map['queued'] == 1,
+      passengerCount: intVal(['passenger_count', 'passengerCount'], 1).clamp(1, 4),
     );
   }
 

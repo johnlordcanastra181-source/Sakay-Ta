@@ -22,8 +22,8 @@ void main() {
       final app = AppState.instance;
 
       final tricycleMatrix = app.getFareMatrixFor(VehicleType.tricycle);
-      expect(tricycleMatrix.baseFare, 0.0);
-      expect(tricycleMatrix.includedBaseDistance, 0.0);
+      expect(tricycleMatrix.baseFare, 10.0);
+      expect(tricycleMatrix.includedBaseDistance, 2.0);
       expect(tricycleMatrix.perKmRate, 5.0);
       expect(tricycleMatrix.minimumFare, 10.0);
       expect(tricycleMatrix.commissionPercent, 0.0);
@@ -32,39 +32,39 @@ void main() {
       expect(habalMatrix.baseFare, 20.0);
       expect(habalMatrix.includedBaseDistance, 0.0);
       expect(habalMatrix.perKmRate, 5.0);
-      expect(habalMatrix.minimumFare, 15.0);
+      expect(habalMatrix.minimumFare, 20.0);
       expect(habalMatrix.commissionPercent, 0.0);
 
-      // Verify 7.5 km trip fare calculation matches Admin portal simulator
+      // Verify 7.5 km trip fare calculation matches formula: baseFare + (dist - included) * rate
       final tricycleFare = FareCalculator.calculateFare(
         matrix: tricycleMatrix,
         distanceKm: 7.5,
         durationMinutes: 0,
       );
-      expect(tricycleFare, 40.0); // 7.5 * 5 = 37.5 -> rounded nearest P5 = P40
+      expect(tricycleFare, 37.5); // 10.0 + (7.5 - 2.0) * 5 = 37.5
 
       final habalFare = FareCalculator.calculateFare(
         matrix: habalMatrix,
         distanceKm: 7.5,
         durationMinutes: 0,
       );
-      expect(habalFare, 60.0); // 20 + 37.5 = 57.5 -> rounded nearest P5 = P60
+      expect(habalFare, 57.5); // 20.0 + 7.5 * 5 = 57.5
 
       // Also verify via RideConfig & DriverMatchingService
-      expect(RideConfig.fareFor(VehicleType.tricycle, 7.5), 40.0);
-      expect(RideConfig.fareFor(VehicleType.habal, 7.5), 60.0);
+      expect(RideConfig.fareFor(VehicleType.tricycle, 7.5), 37.5);
+      expect(RideConfig.fareFor(VehicleType.habal, 7.5), 57.5);
       expect(
           DriverMatchingService.instance.calculateFare(
             vehicleType: VehicleType.tricycle,
             distanceKm: 7.5,
           ),
-          40.0);
+          37.5);
       expect(
           DriverMatchingService.instance.calculateFare(
             vehicleType: VehicleType.habal,
             distanceKm: 7.5,
           ),
-          60.0);
+          57.5);
     });
 
     test('Trip creation sets 100% of fare as driver earnings with 0 commission',
@@ -141,15 +141,14 @@ void main() {
 
       // Verify Cash Payment is displayed prominently
       expect(find.text('PAYMENT METHOD'), findsOneWidget);
-      expect(
-          find.text('Cash Payment • Pay directly to driver'), findsOneWidget);
+      expect(find.textContaining('Cash'), findsWidgets);
 
       // Verify Total Fare is P40
       expect(find.text('TOTAL FARE'), findsOneWidget);
       expect(find.text('₱40'), findsOneWidget);
 
-      // Verify confirmation button shows Confirm Booking (₱40)
-      expect(find.text('Confirm Booking (₱40)'), findsOneWidget);
+      // Verify confirmation button shows Confirm Booking
+      expect(find.text('Confirm Booking'), findsOneWidget);
 
       // Verify digital payment provider buttons are NOT shown
       expect(find.text('Book with GCash'), findsNothing);

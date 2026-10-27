@@ -277,6 +277,10 @@ class SupabaseService {
     return _database.streamActiveTripForDriver(driverId);
   }
 
+  Stream<List<Trip>> streamActiveTripsForDriver(String driverId) {
+    return _database.streamActiveTripsForDriver(driverId);
+  }
+
   Future<bool> atomicAcceptBooking({
     required String rideId,
     required AppUser driver,

@@ -724,7 +724,10 @@ class SupabaseDatabaseService {
           final allProfileIds = {...userIds, ...reviewerIds}.toList();
           final profiles = allProfileIds.isEmpty
               ? <Map<String, dynamic>>[]
-              : (await _client.from('profiles').select().inFilter('id', allProfileIds))
+              : (await _client
+                      .from('profiles')
+                      .select()
+                      .inFilter('id', allProfileIds))
                   .map((row) => Map<String, dynamic>.from(row))
                   .toList();
           final profilesById = {
@@ -1619,6 +1622,7 @@ class SupabaseDatabaseService {
       'duration_minutes': trip.durationMin,
       'payment_method': trip.paymentMethod,
       'estimated_fare': trip.fare,
+      'passenger_count': trip.passengerCount,
     });
 
     if (response is Map) {
@@ -1682,11 +1686,14 @@ class SupabaseDatabaseService {
       );
 
   Stream<Trip?> streamActiveTripForDriver(String driverId) =>
-      realtimeQueryStream<Trip?>(
+      streamActiveTripsForDriver(driverId).map((trips) => trips.firstOrNull);
+
+  Stream<List<Trip>> streamActiveTripsForDriver(String driverId) =>
+      realtimeQueryStream<List<Trip>>(
         client: _client,
-        feature: 'driver_active_trip',
+        feature: 'driver_active_trips',
         table: 'rides',
-        filterDescription: 'driver_id=$driverId;active_only',
+        filterDescription: 'driver_id=$driverId;active_multi',
         filters: [
           PostgresChangeFilter(
             type: PostgresChangeFilterType.eq,
@@ -1700,10 +1707,10 @@ class SupabaseDatabaseService {
               .select(_rideWithRatingSelect)
               .eq('driver_id', driverId)
               .inFilter('status', kActiveRideStatuses.toList())
-              .order('created_at', ascending: false)
-              .limit(1);
-          if (rows.isEmpty) return null;
-          return _trip(Map<String, dynamic>.from(rows.first));
+              .order('created_at', ascending: true);
+          return rows
+              .map((row) => _trip(Map<String, dynamic>.from(row)))
+              .toList();
         },
         pollInterval: const Duration(seconds: 3),
       );
@@ -1792,7 +1799,9 @@ class SupabaseDatabaseService {
         pollInterval: const Duration(seconds: 30),
       );
 
-  Future<Map<String, ({String name, String plate, String? photoUrl, int avatarColor})>>
+  Future<
+          Map<String,
+              ({String name, String plate, String? photoUrl, int avatarColor})>>
       getDriverDisplayInfoBatch(Iterable<String> driverIds) async {
     final uniqueIds = driverIds
         .map((id) => id.trim())
@@ -1802,8 +1811,8 @@ class SupabaseDatabaseService {
     if (uniqueIds.isEmpty) return const {};
 
     final sw = Stopwatch()..start();
-    final result =
-        <String, ({String name, String plate, String? photoUrl, int avatarColor})>{};
+    final result = <String,
+        ({String name, String plate, String? photoUrl, int avatarColor})>{};
 
     String? resolvePublicAvatar(String? rawPath) {
       final trimmed = rawPath?.trim() ?? '';
@@ -1842,7 +1851,8 @@ class SupabaseDatabaseService {
           result[id] = (
             name: row['full_name']?.toString().trim() ?? '',
             plate: row['plate_number']?.toString().trim() ?? '',
-            photoUrl: resolvePublicAvatar(row['profile_photo_path']?.toString()),
+            photoUrl:
+                resolvePublicAvatar(row['profile_photo_path']?.toString()),
             avatarColor: (row['avatar_color'] as num?)?.toInt() ?? 0,
           );
         }

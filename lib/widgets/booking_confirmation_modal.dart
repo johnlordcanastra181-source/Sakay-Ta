@@ -15,7 +15,8 @@ class BookingConfirmationModal extends StatefulWidget {
     required this.distanceKm,
     required this.durationMins,
     required this.fare,
-    required this.onConfirm,
+    this.onConfirm,
+    this.onConfirmWithCount,
   });
 
   final NearbyDriver driver;
@@ -24,7 +25,8 @@ class BookingConfirmationModal extends StatefulWidget {
   final double distanceKm;
   final int durationMins;
   final double fare;
-  final Future<bool> Function() onConfirm;
+  final Future<bool> Function()? onConfirm;
+  final Future<bool> Function(int passengerCount)? onConfirmWithCount;
 
   @override
   State<BookingConfirmationModal> createState() =>
@@ -34,6 +36,17 @@ class BookingConfirmationModal extends StatefulWidget {
 class _BookingConfirmationModalState extends State<BookingConfirmationModal> {
   final PaymentService _paymentService = PaymentService.instance;
   bool _isSubmitting = false;
+  int _passengerCount = 1;
+
+  Future<bool> _triggerConfirm() async {
+    if (widget.onConfirmWithCount != null) {
+      return await widget.onConfirmWithCount!(_passengerCount);
+    }
+    if (widget.onConfirm != null) {
+      return await widget.onConfirm!();
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +229,94 @@ class _BookingConfirmationModalState extends State<BookingConfirmationModal> {
               ),
               const SizedBox(height: 16),
 
+              // Passenger Count Selector
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.cardElevatedColor(isDark),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppColors.borderColor(isDark)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        isTricycle ? Icons.people_alt_rounded : Icons.person_rounded,
+                        color: isDark ? AppColors.gold : const Color(0xFFB45309),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'PASSENGERS',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.subtextColor(isDark),
+                            ),
+                          ),
+                          Text(
+                            isTricycle
+                                ? '$_passengerCount Pax (Max 4)'
+                                : '1 Pax (Single Rider)',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textColor(isDark),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (isTricycle)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.remove_circle_outline, size: 22),
+                            color: _passengerCount > 1
+                                ? AppColors.textColor(isDark)
+                                : AppColors.subtextColor(isDark).withValues(alpha: 0.4),
+                            onPressed: _passengerCount > 1
+                                ? () => setState(() => _passengerCount--)
+                                : null,
+                          ),
+                          Text(
+                            '$_passengerCount',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textColor(isDark),
+                            ),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.add_circle_outline, size: 22),
+                            color: _passengerCount < 4
+                                ? (isDark ? AppColors.gold : const Color(0xFFB45309))
+                                : AppColors.subtextColor(isDark).withValues(alpha: 0.4),
+                            onPressed: _passengerCount < 4
+                                ? () => setState(() => _passengerCount++)
+                                : null,
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
               // Payment Method Selector
               ListenableBuilder(
                 listenable: _paymentService,
@@ -310,7 +411,7 @@ class _BookingConfirmationModalState extends State<BookingConfirmationModal> {
                           ? null
                           : () async {
                               setState(() => _isSubmitting = true);
-                              final confirmed = await widget.onConfirm();
+                              final confirmed = await _triggerConfirm();
                               if (!mounted) return;
                               Navigator.pop(context, confirmed);
                             },

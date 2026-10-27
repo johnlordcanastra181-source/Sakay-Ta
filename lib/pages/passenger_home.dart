@@ -129,7 +129,9 @@ class _PassengerHomeState extends State<PassengerHome> {
         distanceKm: state.routeDistanceKm,
         durationMins: state.routeDurationMins,
         fare: currentFare,
-        onConfirm: _searchBloc.confirmSelectedBooking,
+        onConfirm: () => _searchBloc.confirmSelectedBooking(),
+        onConfirmWithCount: (count) =>
+            _searchBloc.confirmSelectedBooking(passengerCount: count),
       ),
     ).then((confirmed) {
       if (confirmed == true && mounted) {

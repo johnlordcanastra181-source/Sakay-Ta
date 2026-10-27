@@ -42,8 +42,8 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
   String? _userStreamKey;
   Stream<DriverDailyEarningsSummary>? _driverDailyEarningsStream;
   String? _driverDailyEarningsStreamKey;
-  Stream<Trip?>? _activeTripStream;
-  String? _activeTripStreamKey;
+  Stream<List<Trip>>? _activeTripsStream;
+  String? _activeTripsStreamKey;
   Stream<FirePayment?>? _paymentStream;
   String? _paymentStreamKey;
   String? _activePassengerId;
@@ -87,18 +87,17 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
   Stream<List<IncomingRideRequest>> _stableIncomingStream(
     AppState app,
     AppUser user,
-    Trip? activeTrip,
+    List<Trip> activeTrips,
   ) {
     final canReceive = user.isOnline &&
-        (activeTrip == null || activeTrip.status == RideStatus.searching);
-    final key = '${user.id}|$canReceive|${activeTrip?.id}|'
-        '${activeTrip?.status}|${activeTrip?.driverId}';
+        (activeTrips.isEmpty || app.availableSeats > 0);
+    final key = '${user.id}|$canReceive|${activeTrips.length}|${app.availableSeats}';
     if (_incomingRequestStream == null || _incomingRequestStreamKey != key) {
       _incomingRequestStreamKey = key;
       _incomingRequestStream = canReceive
           ? app.streamIncomingRequestsForDriver(
               user,
-              assignedTrip: activeTrip,
+              assignedTrip: activeTrips.firstOrNull,
             )
           : Stream.value(const <IncomingRideRequest>[]);
     }
@@ -123,12 +122,12 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
     return _driverDailyEarningsStream!;
   }
 
-  Stream<Trip?> _stableActiveTripStream(AppState app, String userId) {
-    if (_activeTripStream == null || _activeTripStreamKey != userId) {
-      _activeTripStreamKey = userId;
-      _activeTripStream = app.streamActiveTripForDriver(userId);
+  Stream<List<Trip>> _stableActiveTripsStream(AppState app, String userId) {
+    if (_activeTripsStream == null || _activeTripsStreamKey != userId) {
+      _activeTripsStreamKey = userId;
+      _activeTripsStream = app.streamActiveTripsForDriver(userId);
     }
-    return _activeTripStream!;
+    return _activeTripsStream!;
   }
 
   Stream<FirePayment?> _stablePaymentStream(String rideId) {
@@ -188,7 +187,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
             );
           }
           return _scaffold(context, fallbackUser, 0, 0, app.todayDrivingHours,
-              app.activeTrip, const [], null, null);
+              app.activeTrips, app.activeTrip, const [], null, null);
         }
 
         final user = userSnapshot.data ?? app.currentUser;
@@ -208,13 +207,16 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
             final todayFare = dailySummary.earnings;
             final todayTrips = dailySummary.trips;
 
-            return StreamBuilder<Trip?>(
-              stream: _stableActiveTripStream(app, id),
-              builder: (context, activeTripSnapshot) {
-                final activeTrip = activeTripSnapshot.data;
+            return StreamBuilder<List<Trip>>(
+              stream: _stableActiveTripsStream(app, id),
+              builder: (context, activeTripsSnapshot) {
+                final activeTrips =
+                    activeTripsSnapshot.data ?? app.activeTrips;
+                final activeTrip =
+                    activeTrips.firstOrNull ?? app.activeTrip;
 
                 return StreamBuilder<List<IncomingRideRequest>>(
-                  stream: _stableIncomingStream(app, user, activeTrip),
+                  stream: _stableIncomingStream(app, user, activeTrips),
                   initialData: activeTrip != null &&
                           activeTrip.status == RideStatus.searching &&
                           activeTrip.driverId == user.id
@@ -237,6 +239,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                       todayFare,
                       todayTrips,
                       app.todayDrivingHours,
+                      activeTrips,
                       activeTrip,
                       incomingRequests,
                       incomingSnapshot.error,
@@ -258,6 +261,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
     double todayFare,
     int todayTrips,
     double todayHours,
+    List<Trip> activeTrips,
     Trip? activeTrip,
     List<IncomingRideRequest> incomingRequests,
     Object? streamError,
@@ -291,6 +295,7 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
             _buildIncomingSection(
               context,
               user,
+              activeTrips,
               activeTrip,
               incomingRequests,
               streamError,
@@ -735,28 +740,152 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
   Widget _buildIncomingSection(
     BuildContext context,
     AppUser user,
+    List<Trip> activeTrips,
     Trip? activeTrip,
     List<IncomingRideRequest> incomingRequests,
     Object? streamError,
   ) {
     final isDark = AppState.instance.darkMode ||
         Theme.of(context).brightness == Brightness.dark;
+    final app = context.read<AppState>();
+    final ongoingTrips =
+        activeTrips.where((t) => t.status != RideStatus.searching).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          activeTrip != null && activeTrip.status != RideStatus.searching
-              ? 'Active Trip'
-              : 'Incoming Request',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textColor(isDark),
-            letterSpacing: -0.3,
+        if (ongoingTrips.isNotEmpty) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                ongoingTrips.length > 1
+                    ? 'Active Trips (${ongoingTrips.length})'
+                    : 'Active Trip',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textColor(isDark),
+                  letterSpacing: -0.3,
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: app.availableSeats > 0
+                      ? (isDark
+                          ? const Color(0xFF065F46)
+                          : const Color(0xFFD1FAE5))
+                      : (isDark
+                          ? const Color(0xFF78350F)
+                          : const Color(0xFFFEF3C7)),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: app.availableSeats > 0
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFFF59E0B),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      app.maxCapacity > 1
+                          ? Icons.electric_rickshaw
+                          : Icons.two_wheeler,
+                      size: 14,
+                      color: app.availableSeats > 0
+                          ? (isDark
+                              ? const Color(0xFFA7F3D0)
+                              : const Color(0xFF065F46))
+                          : (isDark
+                              ? const Color(0xFFFDE68A)
+                              : const Color(0xFF92400E)),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${app.activePassengersCount}/${app.maxCapacity} Pax'
+                      '${app.availableSeats > 0 ? " • ${app.availableSeats} open" : " • Full"}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: app.availableSeats > 0
+                            ? (isDark
+                                ? const Color(0xFFA7F3D0)
+                                : const Color(0xFF065F46))
+                            : (isDark
+                                ? const Color(0xFFFDE68A)
+                                : const Color(0xFF92400E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 12),
-        if (streamError != null)
+          const SizedBox(height: 12),
+          for (final trip in ongoingTrips) ...[
+            _buildActiveTripCard(context, trip),
+            const SizedBox(height: 12),
+          ],
+          if (app.availableSeats > 0 && incomingRequests.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Incoming Additional Booking (${app.availableSeats} seat(s) open)',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textColor(isDark),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildIncomingRequestCard(context, incomingRequests.first),
+          ] else if (app.availableSeats == 0) ...[
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark
+                      ? const Color(0xFF334155)
+                      : const Color(0xFFCBD5E1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.people_alt_rounded,
+                      size: 18, color: AppColors.subtextColor(isDark)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Vehicle at full capacity (${app.maxCapacity} pax). Complete a trip to open up seats.',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.subtextColor(isDark),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ] else if (streamError != null) ...[
+          Text(
+            'Incoming Request',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textColor(isDark),
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -780,20 +909,44 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                 ),
               ],
             ),
-          )
-        // If driver has an active trip already in accepted/started status
-        else if (activeTrip != null &&
-            activeTrip.status != RideStatus.searching)
-          _buildActiveTripCard(context, activeTrip)
-        // If an incoming real-time ride request is received
-        else if (incomingRequests.isNotEmpty)
-          _buildIncomingRequestCard(context, incomingRequests.first)
-        // If driver is online and waiting for requests
-        else if (user.isOnline)
-          _buildWaitingCard()
-        // If driver is offline
-        else
+          ),
+        ] else if (incomingRequests.isNotEmpty) ...[
+          Text(
+            'Incoming Request',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textColor(isDark),
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildIncomingRequestCard(context, incomingRequests.first),
+        ] else if (user.isOnline) ...[
+          Text(
+            'Incoming Request',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textColor(isDark),
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildWaitingCard(),
+        ] else ...[
+          Text(
+            'Incoming Request',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textColor(isDark),
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: 12),
           _buildOfflineCard(context),
+        ],
       ],
     );
   }
@@ -1261,22 +1414,50 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                   color: AppColors.textColor(isDark),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? AppColors.gold.withValues(alpha: 0.18)
-                      : const Color(0xFFFEF3C7),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '₱${trip.fare.toStringAsFixed(2)}',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.gold : const Color(0xFF92400E),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF1E3A8A).withValues(alpha: 0.3)
+                          : const Color(0xFFDBEAFE),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${trip.passengerCount > 0 ? trip.passengerCount : 1} Pax',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isDark
+                            ? const Color(0xFF93C5FD)
+                            : const Color(0xFF1E40AF),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppColors.gold.withValues(alpha: 0.18)
+                          : const Color(0xFFFEF3C7),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '₱${trip.fare.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        color:
+                            isDark ? AppColors.gold : const Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1405,7 +1586,8 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                     : () async {
                         setState(() => _isProcessingPickupArrival = true);
                         try {
-                          final changed = await app.arriveAtPickup();
+                          final changed =
+                              await app.arriveAtPickup(tripId: trip.id);
                           if (!changed && context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -1462,7 +1644,8 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                     : () async {
                         setState(() => _isProcessingStart = true);
                         try {
-                          final changed = await app.startActiveTrip();
+                          final changed =
+                              await app.startActiveTrip(tripId: trip.id);
                           if (!changed && context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
@@ -1517,7 +1700,8 @@ class _DriverHomeState extends State<DriverHome> with TickerProviderStateMixin {
                     : () async {
                         setState(() => _isProcessingComplete = true);
                         try {
-                          final result = await app.completeTrip(onTime: true);
+                          final result = await app.completeTrip(
+                              onTime: true, tripId: trip.id);
                           if (context.mounted) {
                             final confirmed =
                                 result == TripCompletionResult.confirmed;

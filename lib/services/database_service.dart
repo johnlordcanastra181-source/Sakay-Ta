@@ -209,6 +209,7 @@ class DatabaseService {
         rating_comment TEXT,
         driver_rating REAL,
         passenger_rating REAL,
+        passenger_count INTEGER NOT NULL DEFAULT 1,
         queued INTEGER NOT NULL DEFAULT 0
       )
     ''');
@@ -226,6 +227,7 @@ class DatabaseService {
         dropoff_lng REAL NOT NULL,
         payment_method TEXT NOT NULL DEFAULT 'cash',
         status TEXT NOT NULL DEFAULT 'requested',
+        passenger_count INTEGER NOT NULL DEFAULT 1,
         queued INTEGER NOT NULL DEFAULT 0,
         created_at INTEGER NOT NULL
       )
@@ -1069,6 +1071,7 @@ class DatabaseService {
           'arrived_at': "INTEGER",
           'rating': "INTEGER",
           'rating_comment': "TEXT",
+          'passenger_count': "INTEGER NOT NULL DEFAULT 1",
           'queued': "INTEGER NOT NULL DEFAULT 0",
         };
         for (final entry in expectedTripCols.entries) {
@@ -1081,6 +1084,17 @@ class DatabaseService {
           error: e, stackTrace: s);
     }
           }
+        }
+      }
+
+      final bookingCols = await _getTableColumns(db, 'booking');
+      if (bookingCols.isNotEmpty && !bookingCols.contains('passenger_count')) {
+        try {
+          await db.execute(
+              'ALTER TABLE booking ADD COLUMN passenger_count INTEGER NOT NULL DEFAULT 1');
+        } catch (e, s) {
+          AppLogger.debug('DatabaseService non-fatal note: $e',
+              error: e, stackTrace: s);
         }
       }
 

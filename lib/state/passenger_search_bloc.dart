@@ -1008,7 +1008,8 @@ class PassengerSearchBloc {
     }));
   }
 
-  Future<bool> confirmSelectedBooking({String? paymentMethod}) async {
+  Future<bool> confirmSelectedBooking(
+      {String? paymentMethod, int passengerCount = 1}) async {
     if (!_state.hasLocation ||
         _state.isRouting ||
         _state.routeDistanceKm <= 0 ||
@@ -1053,6 +1054,7 @@ class PassengerSearchBloc {
         vehicleType: _state.selectedVehicle,
         paymentMethod: actualPaymentMethod,
         driverId: selected.id,
+        passengerCount: passengerCount,
         estimatedFare: _state.selectedVehicle == VehicleType.tricycle
             ? _state.tricycleFare
             : _state.habalFare,
@@ -1080,17 +1082,20 @@ class PassengerSearchBloc {
       return false;
     } catch (e) {
       // Check if it's a Supabase/Postgrest exception containing our backend error
-      final errorStr = e.toString();
-      if (errorStr.contains('Driver is no longer online') ||
-          errorStr.contains('available')) {
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('online') ||
+          errorStr.contains('available') ||
+          errorStr.contains('capacity') ||
+          errorStr.contains('full') ||
+          errorStr.contains('active ride or reservation')) {
         _emit(_state.copyWith(
             isBookingConfirmed: false,
             errorMessage:
-                'Driver is no longer available. Please select another driver.'));
+                'Driver is currently unavailable or at full capacity. Please select another driver.'));
       } else {
         _emit(_state.copyWith(
           isBookingConfirmed: false,
-          errorMessage: 'Error: $errorStr',
+          errorMessage: 'Error: ${e.toString().replaceFirst("Exception: ", "").replaceFirst("StateError: ", "")}',
         ));
       }
       return false;

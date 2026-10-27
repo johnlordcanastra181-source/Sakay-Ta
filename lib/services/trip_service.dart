@@ -35,6 +35,7 @@ class TripService {
     String paymentMethod = PaymentMethod.cash,
     bool queued = false,
     String? driverId,
+    int passengerCount = 1,
   }) async {
     final database = await db.database;
     final id = _uuid.v4();
@@ -68,6 +69,7 @@ class TripService {
       paymentMethod: paymentMethod,
       createdAt: DateTime.now(),
       queued: queued,
+      passengerCount: passengerCount.clamp(1, 4),
     );
 
     var authoritativeTrip = trip;
@@ -330,13 +332,18 @@ class TripService {
   }
 
   Future<Trip?> activeTripForDriver(String driverId) async {
+    final trips = await activeTripsForDriver(driverId);
+    return trips.firstOrNull;
+  }
+
+  Future<List<Trip>> activeTripsForDriver(String driverId) async {
     if (SupabaseService.isConfigured) {
       try {
-        final trip = await SupabaseService.instance
-            .streamActiveTripForDriver(driverId)
+        final trips = await SupabaseService.instance
+            .streamActiveTripsForDriver(driverId)
             .first
             .timeout(const Duration(seconds: 4));
-        if (trip != null) return trip;
+        if (trips.isNotEmpty) return trips;
       } catch (e, s) {
         AppLogger.warn('TripService non-fatal note: $e',
             error: e, stackTrace: s);
@@ -354,14 +361,13 @@ class TripService {
           RideStatus.arrived,
           RideStatus.started,
         ],
-        orderBy: 'created_at DESC',
-        limit: 1,
+        orderBy: 'created_at ASC',
       );
-      if (rows.isNotEmpty) return Trip.fromMap(rows.first);
+      return rows.map((r) => Trip.fromMap(r)).toList();
     } catch (e, s) {
       AppLogger.warn('TripService non-fatal note: $e', error: e, stackTrace: s);
     }
-    return null;
+    return const [];
   }
 
   Future<Trip?> incomingTripForDriver(String driverId) async {
